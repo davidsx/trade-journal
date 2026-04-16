@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model AuthToken {
+  id          String   @id @default(cuid())
+  accountId   Int      @unique
+  accessToken String
+  expiresAt   DateTime
+  updatedAt   DateTime @updatedAt
+}
+
+model Fill {
+  id           String   @id
+  accountId    Int
+  contractId   Int
+  contractName String
+  action       String
+  qty          Int
+  price        Float
+  fees         Float
+  timestamp    DateTime
+  orderId      String
+  tradeDate    String
+  syncedAt     DateTime @default(now())
+
+  @@index([accountId, timestamp])
+}
+
+model Trade {
+  id            String   @id @default(cuid())
+  accountId     Int
+  contractId    Int
+  contractName  String
+  direction     String
+  qty           Int
+  entryFillId   String
+  exitFillId    String
+  entryPrice    Float
+  exitPrice     Float
+  entryTime     DateTime
+  exitTime      DateTime
+  holdingMins   Float
+  grossPnl      Float
+  fees          Float
+  netPnl        Float
+  rMultiple     Float?
+  qualityScore  Int?
+  entryScore    Int?
+  exitScore     Int?
+  riskScore     Int?
+  scoreNotes    String?
+  capitalBefore Float
+  capitalAfter  Float
+  createdAt     DateTime @default(now())
+
+  @@index([accountId, entryTime])
+}
+
+model SyncLog {
+  id          String   @id @default(cuid())
+  accountId   Int
+  syncedAt    DateTime @default(now())
+  fillsAdded  Int
+  tradesBuilt Int
+  status      String
+  errorMsg    String?
+}

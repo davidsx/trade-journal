@@ -72,7 +72,7 @@ export default function Sidebar() {
         ) : (
           <>
             <div className="text-sm font-semibold" style={{ color: "var(--accent)" }}>PERF REVIEW</div>
-            <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>Tradovate Dashboard</div>
+            <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>CSV import</div>
           </>
         )}
       </div>

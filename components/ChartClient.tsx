@@ -15,10 +15,6 @@ const INTERVALS = [
 
 type IntervalValue = typeof INTERVALS[number]["value"];
 
-// Apr 8–11 2026 UTC
-const PERIOD1 = "1775606400";
-const PERIOD2 = "1775865600";
-
 interface Props {
   markers: TradeMarker[];
   tradeLines: TradeLine[];
@@ -34,9 +30,7 @@ export default function ChartClient({ markers, tradeLines, tradeCount }: Props) 
   useEffect(() => {
     setStatus("loading");
     setCandles([]);
-    fetch(
-      `/api/candles?symbol=MNQ%3DF&interval=${interval}&period1=${PERIOD1}&period2=${PERIOD2}`
-    )
+    fetch(`/api/candles?symbol=MNQ%3DF&interval=${interval}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.error) {
@@ -90,7 +84,7 @@ export default function ChartClient({ markers, tradeLines, tradeCount }: Props) 
           <span style={{ color: "var(--loss)" }}>Failed to load candles</span>
           <span className="text-xs">{error}</span>
           <a
-            href={`/api/candles?symbol=MNQ%3DF&interval=${interval}&period1=${PERIOD1}&period2=${PERIOD2}`}
+            href={`/api/candles?symbol=MNQ%3DF&interval=${interval}`}
             target="_blank"
             rel="noreferrer"
             className="text-xs underline"

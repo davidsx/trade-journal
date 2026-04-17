@@ -13,7 +13,7 @@ export interface CsvRow {
 }
 
 /**
- * Parse Tradovate "Performance" CSV export.
+ * Parse a Performance / P&L-style CSV (tabular fills: symbol, prices, timestamps).
  * Handles PnL formats: $(73.00)  $185.00  "$1,650.00"
  */
 export function parsePnl(raw: string): number {

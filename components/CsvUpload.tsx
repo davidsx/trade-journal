@@ -96,9 +96,9 @@ export default function CsvUpload() {
       )}
 
       <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
-        Export from Tradovate:
+        Use your broker’s Performance / P&L export:
         <br />
-        Performance tab → Export CSV
+        tabular CSV with fills, prices, and timestamps
       </p>
     </div>
   );

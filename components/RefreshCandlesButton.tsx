@@ -2,9 +2,6 @@
 
 import { useState } from "react";
 
-const PERIOD1 = "1775606400";
-const PERIOD2 = "1775865600";
-
 export default function RefreshCandlesButton() {
   const [status, setStatus] = useState<"idle" | "loading" | "ok" | "error">("idle");
   const [info, setInfo] = useState("");
@@ -13,16 +10,21 @@ export default function RefreshCandlesButton() {
     setStatus("loading");
     setInfo("");
     try {
-      const res = await fetch(
-        `/api/candles?symbol=MNQ%3DF&interval=1m&period1=${PERIOD1}&period2=${PERIOD2}&refresh`,
-        { method: "GET" }
-      );
+      const res = await fetch(`/api/candles?symbol=MNQ%3DF&interval=1m&refresh=1`, {
+        method: "GET",
+      });
       const d = await res.json();
       if (d.error) {
         setInfo(d.error);
         setStatus("error");
       } else {
-        setInfo(`${d.candles?.length ?? 0} bars fetched${d.source === "yfinance" ? " (yfinance)" : ""}`);
+        const parts = [
+          `${d.candles?.length ?? 0} bars`,
+          d.batched ? "multi-fetch" : null,
+          d.source === "yfinance" ? "yfinance" : null,
+          typeof d.tradeCount === "number" ? `${d.tradeCount} trades` : null,
+        ].filter(Boolean);
+        setInfo(parts.join(" · "));
         setStatus("ok");
       }
     } catch (e) {

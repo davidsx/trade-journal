@@ -1,96 +1,58 @@
-# Tradovate Performance Review Dashboard
+# Trading Performance Review
 
-A local trading performance dashboard that imports your Tradovate trade history, computes metrics, scores each trade for quality, and visualizes patterns.
+A local dashboard that imports a **Performance CSV** (e.g. from Tradovate), scores trades, and surfaces metrics, patterns, and charts.
 
-**Stack**: Next.js 14 (App Router) · TypeScript · Prisma 7 + SQLite · Recharts · Tailwind CSS
+**Stack**: Next.js (App Router) · TypeScript · Prisma 7 + PostgreSQL ([Neon](https://neon.tech)) · Recharts · Tailwind CSS
 
 ---
 
-## Quick Start (CSV — no API key required)
+## Quick start
+
+1. Create a **Neon** project and branch (free tier is fine). In the Neon dashboard, copy:
+   - **Pooled** connection string → use as `DATABASE_URL` (used by the app at runtime).
+   - **Direct** connection string → use as `DIRECT_URL` (used by `prisma migrate`; avoids pooler issues with DDL).
+
+2. Copy `.env.example` to `.env.local` in the repo root and replace the placeholders with your Neon URLs:
 
 ```bash
+DATABASE_URL="postgresql://…?sslmode=verify-full"
+DIRECT_URL="postgresql://…?sslmode=verify-full"
+```
+
+If Neon’s dashboard gives `sslmode=require`, change it to **`verify-full`** in both URLs (Neon supports it). That matches what the **`pg`** driver recommends today and removes the Node **SSL modes deprecation** warning at startup.
+
+**Difference:** **`DATABASE_URL`** should be Neon’s **pooled** URL (via their pooler, e.g. `-pooler` in the host). The Next.js app uses it for every request—good for serverless and many concurrent connections. **`DIRECT_URL`** should be the **non-pooled** URL (host like `ep-…` without `-pooler`). Prisma Migrate talks to Postgres for DDL and migration bookkeeping; going **through** the pooler can break or confuse that, so `prisma.config.ts` uses `DIRECT_URL` first, then falls back to `DATABASE_URL` if you omit it (fine for a single direct URL, e.g. local Postgres—set both to the same string).
+
+3. Install and run the app ( **`npm run dev` runs `prisma migrate deploy` first** so tables exist on Neon):
+
+```bash
+npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), then click **Import CSV** in the sidebar and upload your Tradovate export.
+To apply migrations without starting Next.js: **`npm run db:migrate`**.
 
-### How to export from Tradovate
+If **`The table public.Trade does not exist`** still appears, the app is connecting to a database where migrations never succeeded. Confirm **`DATABASE_URL`** / **`DIRECT_URL`** in `.env.local` point at the intended Neon branch, then run **`npm run db:migrate`** and check for errors. Prisma CLI loads `.env` then `.env.local` via `prisma.config.ts` (same as documented above).
 
-1. Open Tradovate web or desktop
-2. Go to **Account → Performance** (the P&L history tab)
-3. Click the **Export** or **Download CSV** button
-4. Upload the file to the dashboard via the sidebar button
+If the dev server crashes with **Turbopack / `.next` cache** errors, stop it and run `rm -rf .next` before `npm run dev` again.
 
-> The dashboard auto-detects direction (Long/Short) and scores every trade immediately on import. Re-importing overwrites previous data.
+Open [http://localhost:3000](http://localhost:3000), then use **Import CSV** in the sidebar.
+
+### CSV export (Tradovate)
+
+1. Open Tradovate web or desktop  
+2. **Account → Performance** (P&L history)  
+3. **Export** / **Download CSV**  
+4. Upload the file in the app  
+
+Re-importing **replaces** trades for the fixed CSV account (`accountId = 1` in `app/api/import/route.ts`).
 
 ---
 
-## Getting Your Tradovate API Credentials
+## Deploy (e.g. Vercel)
 
-### Step 1 — Create a Tradovate Account
-
-1. Go to **https://trader.tradovate.com** and sign up
-2. Select **Demo** (free, real market data, fake money)
-3. Confirm your email and log in
-
-### Step 2 — Register an API Application
-
-1. Log in at **https://trader.tradovate.com**
-2. Go to **Account → API Access**
-3. Click **Create New Application**
-4. Fill in:
-   - **App Name**: anything (e.g. `perf-dashboard`)
-   - **Redirect URI**: `http://localhost:3000`
-5. Save — you'll be shown:
-   - `App ID` → `TRADOVATE_APP_ID`
-   - `App Secret` → `TRADOVATE_APP_SECRET`
-   - `CID` (numeric) → `TRADOVATE_CID`
-
-> If you don't see API Access, email **technology@tradovate.com** to have it enabled.
-
-### Step 3 — Fill in `.env.local`
-
-```bash
-# Your Tradovate login
-TRADOVATE_USERNAME=your_email@example.com
-TRADOVATE_PASSWORD=your_tradovate_password
-
-# From the API application you created
-TRADOVATE_APP_ID=perf-dashboard
-TRADOVATE_APP_SECRET=xxxxxxxxxxxxxxxxxxxx
-TRADOVATE_CID=12345
-
-# Generate once — see Step 4
-TRADOVATE_DEVICE_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-
-# "demo" or "live"
-TRADOVATE_ENVIRONMENT=demo
-
-DATABASE_URL=file:./data/tradovate.db
-```
-
-### Step 4 — Generate a Device ID
-
-Tradovate requires a stable, permanent device identifier. Generate it **once** and never change it:
-
-```bash
-# Mac / Linux
-uuidgen
-
-# Windows PowerShell
-[guid]::NewGuid()
-```
-
-Paste the result as `TRADOVATE_DEVICE_ID`. If you change it, Tradovate treats your app as a new device.
-
-### Step 5 — (Optional) Pin a Specific Account
-
-If you have multiple accounts and want to pin one:
-
-1. Start the app and call `GET /api/auth/status` — it returns all account IDs
-2. Add `TRADOVATE_ACCOUNT_ID=12345` to `.env.local`
-
-Otherwise the app auto-selects your first active account.
+- Set **`DATABASE_URL`** and **`DIRECT_URL`** in the project environment (same values as locally, or Neon branch-specific URLs for preview).
+- Build runs **`prisma generate`** via `postinstall` / `build`. Run **`npx prisma migrate deploy`** once against the production database (from your machine or CI) whenever you add migrations.
 
 ---
 
@@ -98,58 +60,41 @@ Otherwise the app auto-selects your first active account.
 
 | Route | Description |
 |-------|-------------|
-| `/` | Dashboard — 8 stat cards, equity curve, recent trades |
-| `/trades` | Full trade log with filters and score badges |
-| `/trades/:id` | Trade detail — score breakdown (entry / exit / risk) |
-| `/analytics` | Drawdown chart, per-trade P&L bars, score distribution |
-| `/patterns` | Time/day heatmaps, instrument breakdown, streak panel |
+| `/` | Dashboard — stats, equity curve, recent trades |
+| `/trades` | Trade log with filters and score badges |
+| `/trades/:id` | Trade detail — score breakdown |
+| `/analytics` | Drawdown, P&L bars, score distribution |
+| `/patterns` | Time/day heatmaps, instruments, streaks |
+| `/chart` | Candle chart with trade markers |
 
 ---
 
-## API Routes
+## API routes
 
-```
-POST /api/auth/connect       Connect to Tradovate (triggers OAuth)
-GET  /api/auth/status        Token validity
-POST /api/sync               Pull fills → rebuild trades → score trades
-GET  /api/sync/status        Last sync log
-GET  /api/metrics            Summary metrics + equity curve + drawdown
-GET  /api/trades             Paginated trade list (?limit&offset&contract&from&to)
-GET  /api/trades/:id         Single trade + score notes
-GET  /api/patterns           Time-of-day, day-of-week, instruments, streaks
-GET  /api/scores/best        Top N trades by quality score
-GET  /api/scores/worst       Bottom N trades by quality score
-GET  /api/scores/distribution Score histogram (0–100 in 10-pt buckets)
-```
-
----
-
-## Trade Quality Score (0–100)
-
-Each trade is scored across three dimensions:
-
-| Dimension | Max | What it measures |
-|-----------|-----|-----------------|
-| Entry Quality | 40 | Session timing, position sizing, entry slippage |
-| Exit Quality | 40 | P&L vs median winner, hold time, exit slippage |
-| Risk Management | 20 | R-multiple vs average loss, streak discipline |
-
-Scores are color-coded: **green ≥ 70**, **yellow 40–69**, **red < 40**.
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/health` | App + database connectivity |
+| `POST` | `/api/import` | Upload CSV → replace scored trades for the CSV account |
+| `GET` | `/api/candles` | Yahoo / yfinance 1m candles (optional `period1`/`period2`; default range from trades in DB) |
+| `GET` | `/api/metrics` | Summary metrics, equity curve, drawdown series |
+| `GET` | `/api/trades` | Paginated trades (`limit`, `offset`, `contract`, `from`, `to`) |
+| `GET` | `/api/trades/:id` | Single trade + score notes |
+| `GET` | `/api/patterns` | Time-of-day, day-of-week, instruments, streaks |
+| `GET` | `/api/insights` | Insight summaries used by the insights page |
+| `GET` | `/api/scores/best` | Top trades by quality score |
+| `GET` | `/api/scores/worst` | Bottom trades by quality score |
+| `GET` | `/api/scores/distribution` | Score histogram buckets |
+| `POST` | `/api/rescore` | Re-run scoring over trades in DB |
 
 ---
 
-## Pattern Detection
+## Database & Prisma 7
 
-- **Time of day** — 30-min buckets, win rate + avg P&L per bucket
-- **Day of week** — Mon–Fri breakdown
-- **Instruments** — per-contract win rate, profit factor, warnings if < 40% WR
-- **Streaks** — current streak, max win/loss streak, longest underwater period
-- **Edge decay** — rolling 20-trade win rate, alerts if drops >15pp vs overall
+- **Runtime**: `lib/db/prisma.ts` uses `@prisma/adapter-pg` with **`DATABASE_URL`** (Neon pooled URL on serverless is OK).
+- **Migrations**: `prisma.config.ts` uses **`DIRECT_URL`**, falling back to **`DATABASE_URL`** if `DIRECT_URL` is unset. Prefer setting both for Neon.
 
 ---
 
-## Database
+## Trade quality score (0–100)
 
-SQLite at `data/tradovate.db` — created automatically on first run. Never committed (`.gitignore`).
-
-To reset: delete `data/tradovate.db` and re-sync.
+Entry (40) · Exit (40) · Risk (20). Color bands: **green ≥ 70**, **yellow 40–69**, **red < 40**.

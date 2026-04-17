@@ -1,5 +1,15 @@
+import { config as loadEnv } from "dotenv";
+import { resolve } from "node:path";
 import { defineConfig } from "prisma/config";
-import path from "path";
+
+// Match Next.js: `.env` then `.env.local` (local overrides).
+loadEnv({ path: resolve(process.cwd(), ".env") });
+loadEnv({ path: resolve(process.cwd(), ".env.local"), override: true });
+
+/** Prisma Migrate / CLI: prefer Neon direct URL when set (pooler URLs can break DDL). */
+function migrateDatabaseUrl(): string {
+  return process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? "";
+}
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
@@ -7,6 +17,6 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"] ?? `file:${path.join(process.cwd(), "data/tradovate.db")}`,
+    url: migrateDatabaseUrl(),
   },
 });

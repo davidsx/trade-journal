@@ -4,15 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-}
-
-model AuthToken {
-  id          String   @id @default(cuid())
-  accountId   Int      @unique
-  accessToken String
-  expiresAt   DateTime
-  updatedAt   DateTime @updatedAt
+  provider = "postgresql"
 }
 
 model Fill {
@@ -60,14 +52,4 @@ model Trade {
   createdAt     DateTime @default(now())
 
   @@index([accountId, entryTime])
-}
-
-model SyncLog {
-  id          String   @id @default(cuid())
-  accountId   Int
-  syncedAt    DateTime @default(now())
-  fillsAdded  Int
-  tradesBuilt Int
-  status      String
-  errorMsg    String?
 }

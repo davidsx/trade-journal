@@ -4,7 +4,7 @@ import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
   title: "Trading Performance Review",
-  description: "Tradovate trading performance dashboard",
+  description: "Trading performance review from CSV import",
 };
 
 export default function RootLayout({

@@ -101,7 +101,7 @@ export default async function DashboardPage() {
         <h2 className="text-sm font-medium mb-3" style={{ color: "var(--text-secondary)" }}>
           Equity Curve
         </h2>
-        <EquityCurve data={metrics.equityCurve} />
+        <EquityCurve data={metrics.equityCurve} startingCapital={metrics.startingCapital} />
       </div>
 
       {/* Recent trades */}

@@ -27,6 +27,8 @@ export interface MetricsSummary {
   sortinoRatio: number;
   avgHoldingMins: number;
   avgQualityScore: number | null;
+  /** Account size before the first trade (chronological). */
+  startingCapital: number;
   equityCurve: EquityPoint[];
   drawdownSeries: DrawdownPoint[];
 }
@@ -124,6 +126,7 @@ export function computeSummaryMetrics(trades: Trade[]): MetricsSummary {
       sortinoRatio: 0,
       avgHoldingMins: 0,
       avgQualityScore: null,
+      startingCapital: 0,
       equityCurve: [],
       drawdownSeries: [],
     };
@@ -155,6 +158,7 @@ export function computeSummaryMetrics(trades: Trade[]): MetricsSummary {
     sortinoRatio: computeSortino(trades),
     avgHoldingMins: trades.reduce((s, t) => s + t.holdingMins, 0) / trades.length,
     avgQualityScore: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
+    startingCapital: trades[0].capitalBefore,
     equityCurve,
     drawdownSeries,
   };

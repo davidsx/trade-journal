@@ -17,6 +17,8 @@ interface EquityPoint {
 
 interface Props {
   data: EquityPoint[];
+  /** Used to anchor the Y-axis floor at 92% of initial capital (see domain min). */
+  startingCapital: number;
 }
 
 function fmtDate(iso: string) {
@@ -27,7 +29,7 @@ function fmtUsd(v: number) {
   return `$${v.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-export default function EquityCurve({ data }: Props) {
+export default function EquityCurve({ data, startingCapital }: Props) {
   if (data.length === 0) {
     return (
       <div
@@ -38,6 +40,10 @@ export default function EquityCurve({ data }: Props) {
       </div>
     );
   }
+
+  const minEquity = Math.min(...data.map((d) => d.equity));
+  const yDomainMin =
+    startingCapital > 0 ? Math.min(startingCapital * 0.92, minEquity) : minEquity;
 
   return (
     <ResponsiveContainer width="100%" height={220}>
@@ -58,6 +64,7 @@ export default function EquityCurve({ data }: Props) {
           interval="preserveStartEnd"
         />
         <YAxis
+          domain={[yDomainMin, "auto"]}
           tickFormatter={fmtUsd}
           tick={{ fill: "#6b7280", fontSize: 11 }}
           axisLine={false}

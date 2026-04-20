@@ -2,6 +2,17 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { parseCsv, csvRowsToTrades } from "@/lib/csv/parser";
+import { importedTradeToWire } from "@/lib/csv/importWire";
+
+/** Keep each /api/import/batch request small enough for Vercel time limits. */
+const BATCH_SIZE = 60;
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
 
 export default function CsvUpload() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -20,20 +31,50 @@ export default function CsvUpload() {
     setMessage(null);
 
     try {
-      const form = new FormData();
-      form.append("file", file);
+      const text = await file.text();
+      const rows = parseCsv(text);
+      const trades = csvRowsToTrades(rows, 1);
+      const batches = chunk(trades, BATCH_SIZE);
+      const allCsvIds = trades.map((t) => t.id);
 
-      const res = await fetch("/api/import", { method: "POST", body: form });
-      const data = await res.json();
+      let replacedCount: number | undefined;
 
-      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      for (let i = 0; i < batches.length; i++) {
+        setMessage(`Uploading… batch ${i + 1}/${batches.length}`);
+        const wires = batches[i]!.map(importedTradeToWire);
+        const res = await fetch("/api/import/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            trades: wires,
+            isFirstBatch: i === 0,
+            ...(i === 0 ? { allCsvIds } : {}),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? `Batch ${i + 1} failed`);
+        if (typeof data.replacedCount === "number") replacedCount = data.replacedCount;
+      }
+
+      setMessage("Scoring trades…");
+      const finRes = await fetch("/api/import/finalize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rowsInCsv: trades.length,
+          symbol: trades[0]?.contractName,
+          replacedCount,
+        }),
+      });
+      const data = await finRes.json();
+      if (!finRes.ok) throw new Error(data.error ?? "Finalize failed");
 
       setStatus("done");
       const parts: string[] = [];
       if (typeof data.addedFromCsv === "number" && typeof data.updatedFromCsv === "number") {
         parts.push(`${data.addedFromCsv} new, ${data.updatedFromCsv} updated from CSV`);
       } else {
-        parts.push(`${data.imported} rows in file`);
+        parts.push(`${data.imported ?? trades.length} rows in file`);
       }
       if (typeof data.totalTrades === "number") {
         parts.push(`${data.totalTrades} total in account`);

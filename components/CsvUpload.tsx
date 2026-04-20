@@ -29,7 +29,17 @@ export default function CsvUpload() {
       if (!res.ok) throw new Error(data.error ?? "Upload failed");
 
       setStatus("done");
-      setMessage(`${data.imported} trades imported (${data.symbol})`);
+      const parts: string[] = [];
+      if (typeof data.addedFromCsv === "number" && typeof data.updatedFromCsv === "number") {
+        parts.push(`${data.addedFromCsv} new, ${data.updatedFromCsv} updated from CSV`);
+      } else {
+        parts.push(`${data.imported} rows in file`);
+      }
+      if (typeof data.totalTrades === "number") {
+        parts.push(`${data.totalTrades} total in account`);
+      }
+      if (data.symbol) parts.push(String(data.symbol));
+      setMessage(parts.join(" · "));
       router.refresh();
     } catch (e) {
       setStatus("error");

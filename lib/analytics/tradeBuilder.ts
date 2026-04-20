@@ -1,4 +1,5 @@
 import type { FillModel as Fill } from "@/app/generated/prisma/models";
+import { DEFAULT_INITIAL_BALANCE } from "@/lib/accountConstants";
 
 // Point value per contract (dollars per point)
 export const POINT_VALUES: Record<string, number> = {
@@ -77,7 +78,7 @@ export function buildTrades(fills: Fill[], accountId: number): BuiltTrade[] {
 
   const trades: BuiltTrade[] = [];
   // Running capital — starts at 50,000 (demo default); updated as trades are built
-  let runningCapital = 50_000;
+  let runningCapital = DEFAULT_INITIAL_BALANCE;
 
   for (const [, contractFills] of byContract) {
     // Sort chronologically
@@ -233,7 +234,7 @@ export function buildTrades(fills: Fill[], accountId: number): BuiltTrade[] {
   trades.sort((a, b) => a.entryTime.getTime() - b.entryTime.getTime());
 
   // Recompute capitalBefore/After sequentially after sorting
-  let capital = 50_000;
+  let capital = DEFAULT_INITIAL_BALANCE;
   for (const t of trades) {
     t.capitalBefore = capital;
     capital += t.netPnl;

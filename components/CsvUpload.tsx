@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseCsv, csvRowsToTrades } from "@/lib/csv/parser";
 import { importedTradeToWire } from "@/lib/csv/importWire";
+import { DEFAULT_INITIAL_BALANCE } from "@/lib/accountConstants";
 
 /** Parallel in-flight upserts (browser + server; avoid opening hundreds of connections). */
 const UPSERT_CONCURRENCY = 16;
@@ -42,7 +43,13 @@ export default function CsvUpload() {
     try {
       const text = await file.text();
       const rows = parseCsv(text);
-      const trades = csvRowsToTrades(rows, 1);
+      const settingsRes = await fetch("/api/settings");
+      const settings = (await settingsRes.json()) as { initialBalance?: number };
+      const initialBalance =
+        typeof settings.initialBalance === "number" && settings.initialBalance > 0
+          ? settings.initialBalance
+          : DEFAULT_INITIAL_BALANCE;
+      const trades = csvRowsToTrades(rows, 1, initialBalance);
       const total = trades.length;
 
       setMessage("1/3 Checking overlap…");

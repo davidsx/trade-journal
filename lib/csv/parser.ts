@@ -1,3 +1,5 @@
+import { DEFAULT_INITIAL_BALANCE } from "@/lib/accountConstants";
+
 export interface CsvRow {
   symbol: string;
   _tickSize: number;
@@ -134,7 +136,11 @@ export interface ImportedTrade {
   createdAt: Date;
 }
 
-export function csvRowsToTrades(rows: CsvRow[], accountId = 1): ImportedTrade[] {
+export function csvRowsToTrades(
+  rows: CsvRow[],
+  accountId = 1,
+  initialBalance = DEFAULT_INITIAL_BALANCE
+): ImportedTrade[] {
   // Sort chronologically by entry time before computing running capital
   const withMeta = rows.map((row) => {
     const isLong = row.boughtTimestamp <= row.soldTimestamp;
@@ -165,8 +171,8 @@ export function csvRowsToTrades(rows: CsvRow[], accountId = 1): ImportedTrade[] 
   // Sort by entryTime
   withMeta.sort((a, b) => a.entryTime.getTime() - b.entryTime.getTime());
 
-  // Compute running capital
-  let capital = 50_000;
+  // Compute running capital (superseded by finalize scoring; kept for consistent preview)
+  let capital = initialBalance;
   const now = new Date();
 
   return withMeta.map((t) => {

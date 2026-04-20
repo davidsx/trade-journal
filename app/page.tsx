@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/db/prisma";
 import { computeSummaryMetrics } from "@/lib/analytics/metrics";
+import { getAccountSettings } from "@/lib/accountSettings";
 import StatCard from "@/components/StatCard";
-import TradeTable from "@/components/TradeTable";
 import EquityCurve from "@/components/EquityCurve";
+import TradingCalendar from "@/components/TradingCalendar";
+import AccountSettingsForm from "@/components/AccountSettingsForm";
 
 function fmtUsd(v: number) {
   return `${v >= 0 ? "+" : "-"}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -13,12 +15,11 @@ function fmtPct(v: number) {
 }
 
 export default async function DashboardPage() {
+  const settings = await getAccountSettings();
   const trades = await prisma.trade.findMany({ orderBy: { entryTime: "asc" } });
-  const recent = await prisma.trade.findMany({
-    orderBy: { entryTime: "desc" },
-    take: 20,
+  const metrics = computeSummaryMetrics(trades, {
+    initialBalance: settings.initialBalance,
   });
-  const metrics = computeSummaryMetrics(trades);
 
   const scoreColor =
     metrics.avgQualityScore !== null
@@ -36,6 +37,16 @@ export default async function DashboardPage() {
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
           {metrics.totalTrades} trades loaded
         </p>
+      </div>
+
+      <div
+        className="rounded-lg p-4"
+        style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
+      >
+        <h2 className="text-sm font-medium mb-3" style={{ color: "var(--text-secondary)" }}>
+          Account settings
+        </h2>
+        <AccountSettingsForm key={String(settings.initialBalance)} compact initialBalance={settings.initialBalance} />
       </div>
 
       {/* Stat cards */}
@@ -104,12 +115,17 @@ export default async function DashboardPage() {
         <EquityCurve data={metrics.equityCurve} startingCapital={metrics.startingCapital} />
       </div>
 
-      {/* Recent trades */}
-      <div>
-        <h2 className="text-sm font-medium mb-3" style={{ color: "var(--text-secondary)" }}>
-          Recent Trades
-        </h2>
-        <TradeTable trades={recent} />
+      {/* Calendar — client aggregates by local exit date */}
+      <div
+        className="rounded-lg p-4"
+        style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
+      >
+        <TradingCalendar
+          trades={trades.map((t) => ({
+            exitTime: t.exitTime.toISOString(),
+            netPnl: t.netPnl,
+          }))}
+        />
       </div>
     </div>
   );

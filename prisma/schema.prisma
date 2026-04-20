@@ -24,6 +24,12 @@ model Fill {
   @@index([accountId, timestamp])
 }
 
+model AccountSettings {
+  id             Int      @id @default(1)
+  initialBalance Float    @default(50000)
+  updatedAt      DateTime @updatedAt
+}
+
 model Trade {
   id            String   @id @default(cuid())
   accountId     Int

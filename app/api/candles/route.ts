@@ -1,13 +1,29 @@
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
 import { NextRequest, NextResponse } from "next/server";
+import YahooFinance from "yahoo-finance2";
+import {
+  CANDLE_CHUNK_FETCH_SEC,
+  clampUnixRangeForYahoo1m,
+} from "@/lib/candleRange";
+import { getCandleFetchRangeFromTrades } from "@/lib/tradeCandleBounds";
 
 /** Batched trade-range fetches can take a while (many Yahoo chunks). */
 export const maxDuration = 120;
-import { execFile } from "child_process";
-import { promisify } from "util";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { join, dirname } from "path";
-import { CANDLE_CHUNK_FETCH_SEC } from "@/lib/candleRange";
-import { getCandleFetchRangeFromTrades } from "@/lib/tradeCandleBounds";
+
+export const runtime = "nodejs";
+
+/** Browser-like UA — Yahoo often blocks the library default + datacenter requests without it. */
+const yahooFinance = new YahooFinance({
+  fetchOptions: {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      Accept: "application/json, text/plain, */*",
+      Referer: "https://finance.yahoo.com/",
+    },
+  },
+});
 
 export interface Candle {
   time: number; // Unix timestamp (seconds)
@@ -18,7 +34,6 @@ export interface Candle {
   volume: number;
 }
 
-const execFileAsync = promisify(execFile);
 const CACHE_PATH = join(process.cwd(), "data", "candles-cache.json");
 // Cache is valid for 6 hours (unless refresh or stale slice)
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -31,6 +46,15 @@ const LIVE_EDGE_WINDOW_SEC = 6 * 60 * 60;
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function fetchTimeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal !== "undefined" && "timeout" in AbortSignal && typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(ms);
+  }
+  const c = new AbortController();
+  setTimeout(() => c.abort(), ms);
+  return c.signal;
 }
 
 interface CacheFile {
@@ -127,27 +151,38 @@ function writeMergedCache(
   }
 }
 
-async function curlYahoo(url: string): Promise<string> {
-  const { stdout } = await execFileAsync(
-    "curl",
-    [
-      "-s",
-      "-L",
-      "--max-time",
-      "20",
-      "-H",
-      "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      "-H",
-      "Accept: application/json",
-      "-H",
-      "Accept-Language: en-US,en;q=0.9",
-      "-H",
-      "Referer: https://finance.yahoo.com/",
-      url,
-    ],
-    { maxBuffer: 20 * 1024 * 1024 }
-  );
-  return stdout;
+async function fetchYahooChartText(url: string): Promise<string> {
+  const headers: Record<string, string> = {
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    Accept: "application/json",
+    "Accept-Language": "en-US,en;q=0.9",
+    Referer: "https://finance.yahoo.com/",
+  };
+  const direct = async () => {
+    const res = await fetch(url, {
+      headers,
+      signal: fetchTimeoutSignal(28_000),
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`Yahoo HTTP ${res.status}`);
+    return res.text();
+  };
+  /** Third-party raw proxy — last resort when Yahoo blocks Vercel / serverless IPs. */
+  const viaAllOrigins = async () => {
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    const res = await fetch(proxyUrl, {
+      signal: fetchTimeoutSignal(45_000),
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`allorigins HTTP ${res.status}`);
+    return res.text();
+  };
+  try {
+    return await direct();
+  } catch {
+    return viaAllOrigins();
+  }
 }
 
 function parseYahooChart(raw: string): Candle[] {
@@ -181,68 +216,118 @@ function parseYahooChart(raw: string): Candle[] {
   return candles;
 }
 
-async function fetchViaYfinance(
+/**
+ * Pure-JS Yahoo chart (same data as curl path) — works on Vercel where python3/curl are absent.
+ */
+async function fetchViaYahooFinance2(
   symbol: string,
   period1: string,
-  period2: string
+  period2: string,
+  barInterval: "1m" | "5m" = "1m"
 ): Promise<Candle[]> {
-  const start = new Date(Number(period1) * 1000).toISOString().slice(0, 10);
-  const end = new Date(Number(period2) * 1000).toISOString().slice(0, 10);
-  const script = `
-import yfinance as yf, json, sys
-df = yf.Ticker(${JSON.stringify(symbol)}).history(start=${JSON.stringify(start)}, end=${JSON.stringify(end)}, interval="1m", prepost=True)
-if df.empty:
-    print("[]")
-else:
-    out = []
-    for ts, row in df.iterrows():
-        c = row["Close"]; o = row["Open"]
-        if c != c or o != o: continue
-        out.append({"time": int(ts.timestamp()), "open": round(float(o),4), "high": round(float(row["High"]),4), "low": round(float(row["Low"]),4), "close": round(float(c),4), "volume": int(row["Volume"]) if row["Volume"]==row["Volume"] else 0})
-    print(json.dumps(out))
-`;
-  const { stdout } = await execFileAsync("python3", ["-c", script], {
-    maxBuffer: 20 * 1024 * 1024,
+  const p1 = Number(period1);
+  const p2 = Number(period2);
+  if (p2 <= p1) return [];
+  const result = await yahooFinance.chart(symbol, {
+    period1: new Date(p1 * 1000),
+    period2: new Date(p2 * 1000),
+    interval: barInterval,
+    includePrePost: true,
+    return: "array",
   });
-  return JSON.parse(stdout.trim()) as Candle[];
+  const quotes = result.quotes ?? [];
+  const candles: Candle[] = [];
+  for (const q of quotes) {
+    if (q.close == null || q.open == null) continue;
+    candles.push({
+      time: Math.floor(q.date.getTime() / 1000),
+      open: q.open,
+      high: q.high ?? q.close,
+      low: q.low ?? q.close,
+      close: q.close,
+      volume: q.volume ?? 0,
+    });
+  }
+  return candles;
 }
 
-function yahooChartUrl(symbol: string, interval: string, p1: number, p2: number): string {
-  return (
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
-    `?interval=${interval}&period1=${p1}&period2=${p2}&includePrePost=true`
-  );
-}
-
-/** One Yahoo request; empty or parse failure falls through to caller. */
-async function fetchYahooChunk(
+function yahooChartUrl(
+  host: "query1" | "query2",
   symbol: string,
   interval: string,
   p1: number,
   p2: number
+): string {
+  const base =
+    host === "query1"
+      ? "https://query1.finance.yahoo.com/v8/finance/chart/"
+      : "https://query2.finance.yahoo.com/v8/finance/chart/";
+  return (
+    `${base}${encodeURIComponent(symbol)}` +
+    `?interval=${interval}&period1=${p1}&period2=${p2}&includePrePost=true`
+  );
+}
+
+/** Direct chart HTTP (often blocked on cloud IPs; kept as fallback after yahoo-finance2). */
+async function fetchYahooChunk(
+  symbol: string,
+  interval: string,
+  p1: number,
+  p2: number,
+  host: "query1" | "query2" = "query1"
 ): Promise<Candle[]> {
-  const raw = await curlYahoo(yahooChartUrl(symbol, interval, p1, p2));
+  const raw = await fetchYahooChartText(yahooChartUrl(host, symbol, interval, p1, p2));
   return parseYahooChart(raw);
 }
 
 /**
- * Fetch [p1, p2] (unix seconds). Uses Yahoo first, then yfinance for that chunk.
+ * One Yahoo chart interval (1m or coarser fallback).
+ */
+async function fetchOneYahooInterval(
+  symbol: string,
+  chartInterval: string,
+  p1: number,
+  p2: number
+): Promise<{ candles: Candle[]; source?: "yahoo-finance2" }> {
+  try {
+    const bar: "1m" | "5m" = chartInterval === "5m" ? "5m" : "1m";
+    const fromLib = await fetchViaYahooFinance2(symbol, String(p1), String(p2), bar);
+    if (fromLib.length > 0) return { candles: fromLib, source: "yahoo-finance2" };
+  } catch {
+    /* try HTTP */
+  }
+  try {
+    const fromQ1 = await fetchYahooChunk(symbol, chartInterval, p1, p2, "query1");
+    if (fromQ1.length > 0) return { candles: fromQ1 };
+  } catch {
+    /* try query2 */
+  }
+  try {
+    const fromQ2 = await fetchYahooChunk(symbol, chartInterval, p1, p2, "query2");
+    if (fromQ2.length > 0) return { candles: fromQ2 };
+  } catch {
+    /* empty */
+  }
+  return { candles: [] };
+}
+
+/**
+ * Fetch [p1, p2]. Try 1m, then 5m bars (same OHLC shape; scorer is less precise but data loads on blocked hosts).
  */
 async function fetchChunkWithFallback(
   symbol: string,
   interval: string,
   p1: number,
   p2: number
-): Promise<{ candles: Candle[]; source?: "yfinance" }> {
-  try {
-    const fromYahoo = await fetchYahooChunk(symbol, interval, p1, p2);
-    if (fromYahoo.length > 0) return { candles: fromYahoo };
-  } catch {
-    /* try yfinance */
+): Promise<{ candles: Candle[]; source?: "yahoo-finance2"; used5m?: boolean }> {
+  const one = await fetchOneYahooInterval(symbol, interval, p1, p2);
+  if (one.candles.length > 0) return { ...one, used5m: false };
+
+  if (interval === "1m") {
+    const five = await fetchOneYahooInterval(symbol, "5m", p1, p2);
+    if (five.candles.length > 0) return { ...five, used5m: true };
   }
-  const fromPy = await fetchViaYfinance(symbol, String(p1), String(p2));
-  if (fromPy.length > 0) return { candles: fromPy, source: "yfinance" };
-  return { candles: [] };
+  return { candles: [], used5m: false };
 }
 
 async function fetchCandlesForRange(
@@ -250,32 +335,81 @@ async function fetchCandlesForRange(
   interval: string,
   period1Str: string,
   period2Str: string
-): Promise<{ candles: Candle[]; source?: "yfinance"; batched: boolean }> {
-  const p1 = Number(period1Str);
-  const p2 = Number(period2Str);
+): Promise<{
+  candles: Candle[];
+  source?: "yahoo-finance2";
+  batched: boolean;
+  rangeClamped?: boolean;
+  usedRecentFallback?: boolean;
+  used5mBars?: boolean;
+}> {
+  let p1 = Number(period1Str);
+  let p2 = Number(period2Str);
+  let rangeClamped = false;
+
+  if (interval === "1m") {
+    const c = clampUnixRangeForYahoo1m(p1, p2);
+    p1 = c.p1;
+    p2 = c.p2;
+    rangeClamped = c.clamped;
+  }
+
   const span = p2 - p1;
-  if (span <= 0) return { candles: [], batched: false };
+  if (span <= 0) return { candles: [], batched: false, rangeClamped };
 
-  if (span <= CANDLE_CHUNK_FETCH_SEC) {
-    const r = await fetchChunkWithFallback(symbol, interval, p1, p2);
-    return { ...r, batched: false };
+  async function runBatched(): Promise<{ merged: Candle[]; anyLib: boolean; any5m: boolean }> {
+    if (span <= CANDLE_CHUNK_FETCH_SEC) {
+      const r = await fetchChunkWithFallback(symbol, interval, p1, p2);
+      return {
+        merged: r.candles,
+        anyLib: r.source === "yahoo-finance2",
+        any5m: !!r.used5m,
+      };
+    }
+    let merged: Candle[] = [];
+    let anyLib = false;
+    let any5m = false;
+    let cursor = p1;
+    while (cursor < p2) {
+      const chunkEnd = Math.min(cursor + CANDLE_CHUNK_FETCH_SEC, p2);
+      const r = await fetchChunkWithFallback(symbol, interval, cursor, chunkEnd);
+      if (r.source === "yahoo-finance2") anyLib = true;
+      if (r.used5m) any5m = true;
+      merged = mergeCandles(merged, r.candles);
+      cursor = chunkEnd;
+      await sleep(200);
+    }
+    return { merged, anyLib, any5m };
   }
 
-  let merged: Candle[] = [];
-  let anyYfinance = false;
-  let cursor = p1;
-  while (cursor < p2) {
-    const chunkEnd = Math.min(cursor + CANDLE_CHUNK_FETCH_SEC, p2);
-    const r = await fetchChunkWithFallback(symbol, interval, cursor, chunkEnd);
-    if (r.source === "yfinance") anyYfinance = true;
-    merged = mergeCandles(merged, r.candles);
-    cursor = chunkEnd;
-    await sleep(200);
+  let { merged, anyLib, any5m } = await runBatched();
+
+  if (merged.length === 0 && interval === "1m") {
+    const now = Math.floor(Date.now() / 1000);
+    const fb1 = now - 7 * 24 * 60 * 60;
+    const r = await fetchChunkWithFallback(symbol, interval, fb1, now);
+    if (r.candles.length > 0) {
+      merged = r.candles;
+      anyLib = r.source === "yahoo-finance2" || anyLib;
+      if (r.used5m) any5m = true;
+      rangeClamped = true;
+      return {
+        candles: merged,
+        source: anyLib ? "yahoo-finance2" : undefined,
+        batched: false,
+        rangeClamped: true,
+        usedRecentFallback: true,
+        ...(any5m ? { used5mBars: true } : {}),
+      };
+    }
   }
+
   return {
     candles: merged,
-    source: anyYfinance ? "yfinance" : undefined,
-    batched: true,
+    source: anyLib ? "yahoo-finance2" : undefined,
+    batched: span > CANDLE_CHUNK_FETCH_SEC,
+    ...(rangeClamped ? { rangeClamped: true } : {}),
+    ...(any5m ? { used5mBars: true } : {}),
   };
 }
 
@@ -316,15 +450,14 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const { candles, source, batched } = await fetchCandlesForRange(
-      symbol,
-      interval,
-      period1,
-      period2
-    );
+    const { candles, source, batched, rangeClamped, usedRecentFallback, used5mBars } =
+      await fetchCandlesForRange(symbol, interval, period1, period2);
     if (candles.length === 0) {
       return NextResponse.json(
-        { error: "No 1m candles returned for this range" },
+        {
+          error:
+            "No candle data returned from Yahoo (blocked IP, rate limit, or symbol/range issue). ~30 days of 1m history max. Retry later or import candles from another source if this persists.",
+        },
         { status: 502 }
       );
     }
@@ -341,6 +474,9 @@ export async function GET(req: NextRequest) {
       batched,
       tradeBased: useTradeRange,
       tradeCount,
+      ...(rangeClamped ? { rangeClamped: true } : {}),
+      ...(usedRecentFallback ? { usedRecentFallback: true } : {}),
+      ...(used5mBars ? { used5mBars: true } : {}),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

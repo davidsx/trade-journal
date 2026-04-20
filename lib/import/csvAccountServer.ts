@@ -2,9 +2,12 @@ import { prisma } from "@/lib/db/prisma";
 import { scoreTrades } from "@/lib/analytics/scorer";
 import type { ImportedTrade } from "@/lib/csv/parser";
 import type { TradeModel as Trade } from "@/app/generated/prisma/models";
+import { getAccountSettings } from "@/lib/accountSettings";
+import { DEFAULT_INITIAL_BALANCE } from "@/lib/accountConstants";
 
 export const CSV_ACCOUNT_ID = 1;
-export const STARTING_CAPITAL = 50_000;
+/** @deprecated use getAccountSettings().initialBalance or DEFAULT_INITIAL_BALANCE */
+export const STARTING_CAPITAL = DEFAULT_INITIAL_BALANCE;
 
 /** Bounded parallelism for DB writes. */
 export async function runPool<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>): Promise<void> {
@@ -72,14 +75,15 @@ export async function upsertImportedTrades(trades: ImportedTrade[]): Promise<voi
   await runPool(trades, conc, upsertOneImportedTrade);
 }
 
-export async function finalizeCsvAccountScoring(): Promise<void> {
+export async function finalizeCsvAccountScoring(initialBalanceOverride?: number): Promise<void> {
   const conc = dbConcurrency();
   const all = await prisma.trade.findMany({
     where: { accountId: CSV_ACCOUNT_ID },
     orderBy: { entryTime: "asc" },
   });
 
-  let capital = STARTING_CAPITAL;
+  const start = initialBalanceOverride ?? (await getAccountSettings()).initialBalance;
+  let capital = start;
   const withCapital: Trade[] = all.map((row) => {
     const capitalBefore = capital;
     capital += row.netPnl;

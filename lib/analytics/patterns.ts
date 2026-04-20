@@ -1,4 +1,5 @@
 import type { TradeModel as Trade } from "@/app/generated/prisma/models";
+import { tradingDayWeekdayIndexHkt } from "@/lib/tradingDay";
 
 export interface TimeOfDayBucket {
   hourLabel: string; // e.g. "09:30"
@@ -45,9 +46,11 @@ export function analyzeTimeOfDay(trades: Trade[]): TimeOfDayBucket[] {
   // 30-min buckets across 24 hours
   const buckets = new Map<string, { wins: number; total: number; pnlSum: number }>();
 
+  const HKT_OFFSET_MS = 8 * 60 * 60 * 1000;
   for (const t of trades) {
-    const h = t.entryTime.getUTCHours();
-    const m = t.entryTime.getUTCMinutes() < 30 ? 0 : 30;
+    const hkt = new Date(t.entryTime.getTime() + HKT_OFFSET_MS);
+    const h = hkt.getUTCHours();
+    const m = hkt.getUTCMinutes() < 30 ? 0 : 30;
     const key = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
     const bucket = buckets.get(key) ?? { wins: 0, total: 0, pnlSum: 0 };
     bucket.total++;
@@ -76,7 +79,7 @@ export function analyzeDayOfWeek(trades: Trade[]): DayOfWeekBucket[] {
   const buckets = new Map<number, { wins: number; total: number; pnlSum: number }>();
 
   for (const t of trades) {
-    const day = t.entryTime.getDay();
+    const day = tradingDayWeekdayIndexHkt(t.exitTime);
     const b = buckets.get(day) ?? { wins: 0, total: 0, pnlSum: 0 };
     b.total++;
     if (t.netPnl > 0) b.wins++;

@@ -37,6 +37,8 @@ const ICON_CHART = "M4 3v3M4 9v4M4 5h2v4H4zM10 4v2M10 10v2M10 6h2v4h-2z";
 const ICON_SCORE = "M6.5 6a1.5 1.5 0 0 1 3 0c0 1-1.5 1.5-1.5 2.5M8 12v.5";
 // Insights: magnifying glass
 const ICON_INSIGHTS = "M10.5 10.5L14 14M7 11.5A4.5 4.5 0 1 0 7 2.5a4.5 4.5 0 0 0 0 9z";
+// Settings: sliders
+const ICON_SETTINGS = "M2 5h12M2 8h12M2 11h12M6 5v6M10 8v5";
 
 const NAV = [
   { href: "/",            label: "Dashboard",  iconPath: ICON_DASHBOARD  },
@@ -46,6 +48,7 @@ const NAV = [
   { href: "/insights",    label: "Insights",   iconPath: ICON_INSIGHTS   },
   { href: "/chart",       label: "Chart",      iconPath: ICON_CHART      },
   { href: "/score-guide", label: "Score Guide",iconPath: ICON_SCORE      },
+  { href: "/settings",    label: "Settings",   iconPath: ICON_SETTINGS   },
 ];
 
 export default function Sidebar() {

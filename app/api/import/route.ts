@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseCsv, csvRowsToTrades } from "@/lib/csv/parser";
 import { prisma } from "@/lib/db/prisma";
+import { getAccountSettings } from "@/lib/accountSettings";
 import { CSV_ACCOUNT_ID, upsertImportedTrades } from "@/lib/import/csvAccountServer";
 
 /** Prisma + DB; Edge is unsupported for this route. */
@@ -23,7 +24,8 @@ export async function POST(req: NextRequest) {
 
     const text = await (file as Blob).text();
     const rows = parseCsv(text);
-    const trades = csvRowsToTrades(rows, CSV_ACCOUNT_ID);
+    const settings = await getAccountSettings();
+    const trades = csvRowsToTrades(rows, CSV_ACCOUNT_ID, settings.initialBalance);
 
     const csvIds = trades.map((t) => t.id);
     const replacedCount = await prisma.trade.count({

@@ -1,4 +1,9 @@
 import type { TradeModel as Trade } from "@/app/generated/prisma/models";
+import { DEFAULT_INITIAL_BALANCE } from "@/lib/accountConstants";
+
+export interface AccountMetricsOptions {
+  initialBalance: number;
+}
 
 export interface EquityPoint {
   timestamp: string; // ISO
@@ -27,18 +32,22 @@ export interface MetricsSummary {
   sortinoRatio: number;
   avgHoldingMins: number;
   avgQualityScore: number | null;
-  /** Account size before the first trade (chronological). */
+  /** Account size before the first trade (from settings). */
   startingCapital: number;
   equityCurve: EquityPoint[];
   drawdownSeries: DrawdownPoint[];
 }
 
-export function computeEquityCurve(trades: Trade[]): EquityPoint[] {
+/** Equity after each trade in entry-time order; timestamps at exit. */
+export function computeEquityCurve(trades: Trade[], initialBalance: number): EquityPoint[] {
+  const sorted = [...trades].sort((a, b) => a.entryTime.getTime() - b.entryTime.getTime());
   const points: EquityPoint[] = [];
-  for (const t of trades) {
+  let eq = initialBalance;
+  for (const t of sorted) {
+    eq += t.netPnl;
     points.push({
       timestamp: t.exitTime.toISOString(),
-      equity: t.capitalAfter,
+      equity: eq,
     });
   }
   return points;
@@ -108,7 +117,9 @@ export function computeProfitFactor(trades: Trade[]): number {
   return grossWins / grossLosses;
 }
 
-export function computeSummaryMetrics(trades: Trade[]): MetricsSummary {
+export function computeSummaryMetrics(trades: Trade[], options: AccountMetricsOptions): MetricsSummary {
+  const initialBalance = options.initialBalance;
+
   if (trades.length === 0) {
     return {
       totalTrades: 0,
@@ -126,7 +137,7 @@ export function computeSummaryMetrics(trades: Trade[]): MetricsSummary {
       sortinoRatio: 0,
       avgHoldingMins: 0,
       avgQualityScore: null,
-      startingCapital: 0,
+      startingCapital: initialBalance > 0 ? initialBalance : DEFAULT_INITIAL_BALANCE,
       equityCurve: [],
       drawdownSeries: [],
     };
@@ -135,7 +146,7 @@ export function computeSummaryMetrics(trades: Trade[]): MetricsSummary {
   const winners = trades.filter((t) => t.netPnl > 0);
   const losers = trades.filter((t) => t.netPnl < 0);
   const totalNetPnl = trades.reduce((s, t) => s + t.netPnl, 0);
-  const equityCurve = computeEquityCurve(trades);
+  const equityCurve = computeEquityCurve(trades, initialBalance);
   const drawdownSeries = computeDrawdownSeries(equityCurve);
   const maxDrawdownAbs = Math.min(...drawdownSeries.map((d) => d.drawdownAbs), 0);
   const maxDrawdownPct = Math.min(...drawdownSeries.map((d) => d.drawdownPct), 0);
@@ -158,7 +169,7 @@ export function computeSummaryMetrics(trades: Trade[]): MetricsSummary {
     sortinoRatio: computeSortino(trades),
     avgHoldingMins: trades.reduce((s, t) => s + t.holdingMins, 0) / trades.length,
     avgQualityScore: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
-    startingCapital: trades[0].capitalBefore,
+    startingCapital: initialBalance,
     equityCurve,
     drawdownSeries,
   };

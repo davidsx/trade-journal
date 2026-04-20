@@ -20,8 +20,9 @@ export default function RefreshCandlesButton() {
       } else {
         const parts = [
           `${d.candles?.length ?? 0} bars`,
+          d.used5mBars ? "5m bars (1m unavailable)" : null,
           d.batched ? "multi-fetch" : null,
-          d.source === "yfinance" ? "yfinance" : null,
+          d.source === "yahoo-finance2" ? "yahoo-finance2" : null,
           typeof d.tradeCount === "number" ? `${d.tradeCount} trades` : null,
         ].filter(Boolean);
         setInfo(parts.join(" · "));

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { computeSummaryMetrics } from "@/lib/analytics/metrics";
+import { getAccountSettings } from "@/lib/accountSettings";
 import DrawdownChart from "@/components/DrawdownChart";
 import PnlBarChart from "@/components/PnlBarChart";
 import ScoreDistributionChart from "@/components/ScoreDistributionChart";
@@ -7,8 +8,11 @@ import ScorePnlChart from "@/components/ScorePnlChart";
 import type { ScorePnlPoint } from "@/components/ScorePnlChart";
 
 export default async function AnalyticsPage() {
+  const settings = await getAccountSettings();
   const trades = await prisma.trade.findMany({ orderBy: { entryTime: "asc" } });
-  const metrics = computeSummaryMetrics(trades);
+  const metrics = computeSummaryMetrics(trades, {
+    initialBalance: settings.initialBalance,
+  });
 
   // Score distribution
   const buckets = Array.from({ length: 10 }, (_, i) => ({

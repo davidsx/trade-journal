@@ -7,6 +7,12 @@ const nextConfig: NextConfig = {
   devIndicators: {
     position: "top-right",
   },
+  async rewrites() {
+    return [
+      /** Legacy alias; segment config must live only on `app/api/import/score/route.ts`. */
+      { source: "/api/import/finalize", destination: "/api/import/score" },
+    ];
+  },
 };
 
 export default nextConfig;

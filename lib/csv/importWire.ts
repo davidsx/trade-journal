@@ -1,6 +1,6 @@
 import type { ImportedTrade } from "@/lib/csv/parser";
 
-/** JSON-safe payload for batched import (Dates as ISO strings). */
+/** JSON-safe payload for API import (Dates as ISO strings). */
 export type ImportedTradeWire = Omit<ImportedTrade, "entryTime" | "exitTime" | "createdAt"> & {
   entryTime: string;
   exitTime: string;

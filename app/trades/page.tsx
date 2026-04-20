@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import TradeTable from "@/components/TradeTable";
 import RescoreButton from "@/components/RescoreButton";
+import ClearTradesButton from "@/components/ClearTradesButton";
 
 const VALID_SORT_FIELDS = ["entryTime", "netPnl", "qualityScore", "holdingMins"] as const;
 type SortField = (typeof VALID_SORT_FIELDS)[number];
@@ -54,7 +55,10 @@ export default async function TradesPage({
             {total} total trades
           </p>
         </div>
-        <RescoreButton />
+        <div className="flex items-center gap-3 flex-wrap">
+          <RescoreButton />
+          <ClearTradesButton />
+        </div>
       </div>
 
       {/* Filters */}

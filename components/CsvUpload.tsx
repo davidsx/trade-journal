@@ -5,13 +5,22 @@ import { useRouter } from "next/navigation";
 import { parseCsv, csvRowsToTrades } from "@/lib/csv/parser";
 import { importedTradeToWire } from "@/lib/csv/importWire";
 
-/** Keep each /api/import/batch request small enough for Vercel time limits. */
-const BATCH_SIZE = 60;
+/** Parallel in-flight upserts (browser + server; avoid opening hundreds of connections). */
+const UPSERT_CONCURRENCY = 16;
 
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
+async function runPool<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>): Promise<void> {
+  if (items.length === 0) return;
+  const c = Math.max(1, Math.min(concurrency, items.length));
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: c }, async () => {
+      while (true) {
+        const i = next++;
+        if (i >= items.length) break;
+        await fn(items[i]!);
+      }
+    })
+  );
 }
 
 export default function CsvUpload() {
@@ -34,47 +43,52 @@ export default function CsvUpload() {
       const text = await file.text();
       const rows = parseCsv(text);
       const trades = csvRowsToTrades(rows, 1);
-      const batches = chunk(trades, BATCH_SIZE);
-      const allCsvIds = trades.map((t) => t.id);
+      const total = trades.length;
 
-      let replacedCount: number | undefined;
+      setMessage("1/3 Checking overlap…");
+      const overlapRes = await fetch("/api/import/overlap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csvIds: trades.map((t) => t.id) }),
+      });
+      const overlapData = await overlapRes.json();
+      if (!overlapRes.ok) throw new Error(overlapData.error ?? "Overlap query failed");
+      const replacedCount: number = overlapData.replacedCount;
 
-      for (let i = 0; i < batches.length; i++) {
-        setMessage(`Uploading… batch ${i + 1}/${batches.length}`);
-        const wires = batches[i]!.map(importedTradeToWire);
-        const res = await fetch("/api/import/batch", {
+      let done = 0;
+      await runPool(trades, UPSERT_CONCURRENCY, async (t) => {
+        const res = await fetch("/api/import/trade", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            trades: wires,
-            isFirstBatch: i === 0,
-            ...(i === 0 ? { allCsvIds } : {}),
-          }),
+          body: JSON.stringify({ trade: importedTradeToWire(t) }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? `Batch ${i + 1} failed`);
-        if (typeof data.replacedCount === "number") replacedCount = data.replacedCount;
-      }
+        if (!res.ok) throw new Error(data.error ?? "Upsert failed");
+        done += 1;
+        if (done % 25 === 0 || done === total) {
+          setMessage(`2/3 Importing… ${done}/${total}`);
+        }
+      });
 
-      setMessage("Scoring trades…");
-      const finRes = await fetch("/api/import/finalize", {
+      setMessage("3/3 Scoring…");
+      const finRes = await fetch("/api/import/score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          rowsInCsv: trades.length,
+          rowsInCsv: total,
           symbol: trades[0]?.contractName,
           replacedCount,
         }),
       });
       const data = await finRes.json();
-      if (!finRes.ok) throw new Error(data.error ?? "Finalize failed");
+      if (!finRes.ok) throw new Error(data.error ?? "Scoring failed");
 
       setStatus("done");
       const parts: string[] = [];
       if (typeof data.addedFromCsv === "number" && typeof data.updatedFromCsv === "number") {
         parts.push(`${data.addedFromCsv} new, ${data.updatedFromCsv} updated from CSV`);
       } else {
-        parts.push(`${data.imported ?? trades.length} rows in file`);
+        parts.push(`${data.imported ?? total} rows in file`);
       }
       if (typeof data.totalTrades === "number") {
         parts.push(`${data.totalTrades} total in account`);

@@ -57,17 +57,19 @@ export function coreFromImported(t: ImportedTrade) {
   };
 }
 
+export async function upsertOneImportedTrade(t: ImportedTrade): Promise<void> {
+  const core = coreFromImported(t);
+  await prisma.trade.upsert({
+    where: { id: t.id },
+    create: { id: t.id, ...core, createdAt: t.createdAt },
+    update: core,
+  });
+}
+
 export async function upsertImportedTrades(trades: ImportedTrade[]): Promise<void> {
   if (trades.length === 0) return;
   const conc = dbConcurrency();
-  await runPool(trades, conc, async (t) => {
-    const core = coreFromImported(t);
-    await prisma.trade.upsert({
-      where: { id: t.id },
-      create: { id: t.id, ...core, createdAt: t.createdAt },
-      update: core,
-    });
-  });
+  await runPool(trades, conc, upsertOneImportedTrade);
 }
 
 export async function finalizeCsvAccountScoring(): Promise<void> {

@@ -1,19 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseCsv, csvRowsToTrades } from "@/lib/csv/parser";
 import { prisma } from "@/lib/db/prisma";
-import {
-  CSV_ACCOUNT_ID,
-  upsertImportedTrades,
-  finalizeCsvAccountScoring,
-} from "@/lib/import/csvAccountServer";
+import { CSV_ACCOUNT_ID, upsertImportedTrades } from "@/lib/import/csvAccountServer";
 
 /** Prisma + DB; Edge is unsupported for this route. */
 export const runtime = "nodejs";
 
 /**
- * Single-request upload (multipart). Prefer the batched client flow for large files on Vercel.
+ * Multipart upload: parse CSV and upsert trades only. Call `POST /api/import/score` afterward
+ * for running capital and scores (same as the browser import flow).
  */
-export const maxDuration = 300;
+export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,7 +31,6 @@ export async function POST(req: NextRequest) {
     });
 
     await upsertImportedTrades(trades);
-    await finalizeCsvAccountScoring();
 
     const totalTrades = await prisma.trade.count({ where: { accountId: CSV_ACCOUNT_ID } });
 
@@ -45,6 +41,7 @@ export async function POST(req: NextRequest) {
       addedFromCsv: trades.length - replacedCount,
       totalTrades,
       symbol: rows[0]?.symbol,
+      finalizeRequired: true,
     });
   } catch (err) {
     return NextResponse.json(

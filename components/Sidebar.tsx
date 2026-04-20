@@ -71,7 +71,7 @@ export default function Sidebar() {
           <div className="text-sm font-semibold text-center" style={{ color: "var(--accent)" }}>P</div>
         ) : (
           <>
-            <div className="text-sm font-semibold" style={{ color: "var(--accent)" }}>PERF REVIEW</div>
+            <div className="text-sm font-semibold" style={{ color: "var(--accent)" }}>TRADE JOURNAL</div>
             <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>CSV import</div>
           </>
         )}

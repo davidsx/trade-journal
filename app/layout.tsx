@@ -3,8 +3,8 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
-  title: "Trading Performance Review",
-  description: "Trading performance review from CSV import",
+  title: "Trade Journal",
+  description: "Trading journal: import performance CSV, score trades, review metrics and charts.",
 };
 
 export default function RootLayout({

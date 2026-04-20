@@ -1,4 +1,4 @@
-# Trading Performance Review
+# Trade Journal
 
 A local dashboard that imports a **Performance CSV** (e.g. from Tradovate), scores trades, and surfaces metrics, patterns, and charts.
 

@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 
+/** Always render from DB; avoid static/RSC cache of trade counts and metrics on Vercel. */
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Trade Journal",
   description: "Trading journal: import performance CSV, score trades, review metrics and charts.",

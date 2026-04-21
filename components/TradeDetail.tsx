@@ -125,9 +125,9 @@ export default function TradeDetail({ trade, dayCandles }: { trade: Trade; dayCa
           <h2 className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>Quality Score</h2>
           <ScoreBadge score={trade.qualityScore} size="lg" />
         </div>
-        <ScoreBar label="Entry Quality" value={trade.entryScore} max={60} color="var(--accent)" />
+        <ScoreBar label="Entry Quality" value={trade.entryScore} max={70} color="var(--accent)" />
         <ScoreBar label="Exit Quality" value={trade.exitScore} max={25} color="var(--profit)" />
-        <ScoreBar label="Risk Management" value={trade.riskScore} max={15} color="var(--warn)" />
+        <ScoreBar label="Risk Management" value={trade.riskScore} max={5} color="var(--warn)" />
       </div>
 
       {/* Score notes */}

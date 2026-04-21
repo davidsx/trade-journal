@@ -15,13 +15,14 @@ export default function ScoreGuidePage() {
       </div>
 
       {/* Entry */}
-      <Section title="Entry Quality" max={60} color="var(--accent)">
-        <Row label="Session timing" max={10}>
+      <Section title="Entry Quality" max={70} color="var(--accent)">
+        <Row label="Session timing" max={15}>
           <table className="w-full text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
             <tbody>
-              <ScoreRow pts={10} desc="Session open — London first hour (4:00–5:00pm HKT) or NY first hour (9:30–10:30pm HKT)" />
-              <ScoreRow pts={5}  desc="Regular hours — Asia session, rest of London, NY up to 11:30pm HKT" />
-              <ScoreRow pts={0}  desc="After 11:30pm HKT (low activity / late NY / off-hours)" />
+              <ScoreRow pts={15} desc="Session open — London first hour (4:00–5:00pm HKT) or NY first hour (9:30–10:30pm HKT)" />
+              <ScoreRow pts={10} desc="Regular hours — Asia session, rest of London, NY up to 11:30pm HKT" />
+              <ScoreRow pts={5}  desc="New York Afternoon — 11:30pm–1:30am HKT (reduced liquidity)" />
+              <ScoreRow pts={0}  desc="After 1:30am HKT (low activity)" />
             </tbody>
           </table>
         </Row>
@@ -50,12 +51,13 @@ export default function ScoreGuidePage() {
             </tbody>
           </table>
         </Row>
-        <Row label="Position sizing" max={5}>
+        <Row label="Position sizing" max={10}>
           Dollar exposure if price moves 1% against you (qty × price × point value × 1%), as a % of capital. This is a futures-appropriate metric — full notional is misleading for leveraged instruments like NQ/MNQ.
           <table className="w-full text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
             <tbody>
-              <ScoreRow pts={5} desc="1% move ≤ 5% of capital — conservative" />
-              <ScoreRow pts={3} desc="1% move 5–15% of capital — moderate" />
+              <ScoreRow pts={10} desc="1% move ≤ 5% of capital — conservative" />
+              <ScoreRow pts={7} desc="1% move 5–10% of capital — moderate" />
+              <ScoreRow pts={4} desc="1% move 10–15% of capital — moderate" />
               <ScoreRow pts={0} desc="1% move > 15% of capital — oversized" />
             </tbody>
           </table>
@@ -64,42 +66,32 @@ export default function ScoreGuidePage() {
 
       {/* Exit */}
       <Section title="Exit Quality" max={25} color="var(--profit)">
-        <Row label="vs. median winner" max={15}>
-          Compares your P&L to your median winning trade on the same contract.
+        <Row label="Return on capital" max={15}>
+          Net P&L as a percentage of account balance before the trade (no peer comparison).
           <table className="w-full text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
             <tbody>
-              <ScoreRow pts={15} desc="≥ 1.5× median winner" />
-              <ScoreRow pts={10} desc="≥ 1.0× median winner" />
-              <ScoreRow pts={5}  desc="≥ 0.5× median winner (possible early exit)" />
-              <ScoreRow pts={0}  desc="Loss" />
+              <ScoreRow pts={15} desc="&gt; 2% of capital" />
+              <ScoreRow pts={10} desc="&gt; 1.5% of capital" />
+              <ScoreRow pts={5}  desc="&gt; 1% of capital" />
+              <ScoreRow pts={0}  desc="Loss, or win ≤ 1% of capital" />
             </tbody>
           </table>
         </Row>
         <Row label="Hold time" max={10}>
-          Compares your hold duration to your median hold time on the same contract.
+          Absolute hold duration (entry to exit), no comparison to other trades.
           <table className="w-full text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
             <tbody>
-              <ScoreRow pts={10} desc="0.5–2.0× median hold — within normal range" />
-              <ScoreRow pts={6}  desc="> 2.0× — possible overstay" />
-              <ScoreRow pts={2}  desc="< 0.5× — possible early exit" />
+              <ScoreRow pts={10} desc="&lt; 1 minute" />
+              <ScoreRow pts={7}  desc="&lt; 15 minutes" />
+              <ScoreRow pts={4}  desc="&lt; 1 hour" />
+              <ScoreRow pts={0}  desc="≥ 1 hour" />
             </tbody>
           </table>
         </Row>
       </Section>
 
       {/* Risk */}
-      <Section title="Risk Management" max={15} color="var(--warn)">
-        <Row label="R-multiple" max={10}>
-          P&L relative to your average loss on the same contract.
-          <table className="w-full text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-            <tbody>
-              <ScoreRow pts={10} desc="≥ 2R — excellent" />
-              <ScoreRow pts={7}  desc="≥ 1R — good" />
-              <ScoreRow pts={4}  desc="≥ 0.5R — below target" />
-              <ScoreRow pts={0}  desc="< 0.5R — poor" />
-            </tbody>
-          </table>
-        </Row>
+      <Section title="Risk Management" max={5} color="var(--warn)">
         <Row label="Streak context" max={5}>
           <table className="w-full text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
             <tbody>
@@ -141,24 +133,20 @@ export default function ScoreGuidePage() {
             body: "A very late entry. Price interacted with an imbalance zone 2–5 candles ago and has since moved away — the trader is entering well after the structural event, betting on a strong continuation rather than catching the zone itself. The risk is that the best of the move has already occurred. Within-5-candle FVG (10 pts) is a stronger signal than within-15 (5 pts), but neither represents good timing.",
           },
           {
-            title: "Entry at session open (prime) / Entry during regular session hours / Entry after 11:30pm HKT (low activity)",
-            body: "Prime means the first hour of the London open (4:00–5:00pm HKT) or the first hour of the NY open (9:30–10:30pm HKT) — the highest-volume, tightest-spread windows for NQ/MNQ. Regular hours cover the Asia session, the rest of London, and NY up to 11:30pm HKT. After 11:30pm HKT liquidity thins out and spreads widen, so late-night entries score 0.",
+            title: "Entry at session open (prime) / Entry during regular session hours / Entry New York Afternoon — 11:30pm–1:30am HKT (reduced liquidity) / Entry after 1:30am HKT (low activity)",
+            body: "Prime (15 pts) is the first hour of the London open (4:00–5:00pm HKT) or the first hour of the NY open (9:30–10:30pm HKT). Regular session hours (10 pts) cover the Asia session, the rest of London, and NY up to 11:30pm HKT. New York Afternoon (5 pts) is 11:30pm–1:30am HKT — reduced liquidity, but not the worst overnight slot. After 1:30am HKT through the rest of the deep overnight window scores 0.",
           },
           {
             title: "Position size: 1% move = X% of capital (conservative / moderate / oversized)",
-            body: "Measures your dollar exposure if price moves 1% against you (qty × price × point value × 1%), as a percentage of your account before the trade. This is a futures-appropriate metric — full notional is misleading for leveraged instruments. For example, 5 MNQ at 25,000 with $50K capital = $250 exposure per 1% move = 0.5% of capital (conservative). Oversizing is treated as a risk management failure regardless of outcome.",
+            body: "Measures your dollar exposure if price moves 1% against you (qty × price × point value × 1%), as a percentage of your account before the trade. Tiers: ≤ 5% of capital → 10 pts (conservative); 5–10% → 7 pts (moderate); 10–15% → 4 pts (moderate); above 15% → 0 (oversized). Boundaries are inclusive at the top of each band (e.g. exactly 10% scores 7). Full notional is misleading for leveraged instruments — this keeps the metric futures-appropriate.",
           },
           {
-            title: "Exit captured X× median winner / Trade was a loss / Profitable trade (no median benchmark yet)",
-            body: "Compares this trade's P&L against your median winning trade on the same contract. If you typically make $50 on a win but only made $20 this time, that signals an early exit. Losses score 0 regardless. If you have no prior wins to benchmark against, a partial score is awarded.",
+            title: "Exit +X% of capital (>2% / >1.5% / >1% / ≤1%) / Trade was a loss / Profitable trade (capital unknown)",
+            body: "Scores the win as a percentage of balance before the trade: above 2% of capital earns 15 pts, above 1.5% earns 10, above 1% earns 5. A loss always scores 0 on this row. Wins at 1% or below, or wins when capital before the trade is unknown, score 0 here.",
           },
           {
-            title: "Hold time Xm (X× median) / Short hold … possible early exit / Long hold … possible overstay",
-            body: "Compared to your personal median hold duration on that contract. Cutting too fast (< 0.5× median) scores 2 pts — it may indicate you are not letting winners run. Holding too long (> 2.0× median) scores 6 pts — still penalised but less severely, as overstaying a trade is a smaller error than constantly exiting too early.",
-          },
-          {
-            title: "R-multiple XR (excellent / good / below target / poor) / R-multiple: no loss benchmark yet",
-            body: "R = this trade's P&L ÷ your average loss on the same contract. An R of 2.0 means you made twice what you typically lose. If you have no losses on record yet, a neutral 5 pts are awarded.",
+            title: "Hold … (<1 min / <15 min / <1 hour / ≥1 hour)",
+            body: "Points depend only on how long the position was open: under 1 minute scores 10, under 15 minutes scores 7, under 1 hour scores 4, and 1 hour or longer scores 0.",
           },
           {
             title: "Win after X consecutive losses (discipline)",
@@ -166,7 +154,7 @@ export default function ScoreGuidePage() {
           },
           {
             title: "Normal streak context",
-            body: "No notable winning or losing streak leading into this trade. A neutral 5 pts is awarded.",
+            body: "No notable winning or losing streak leading into this trade. A neutral 3 pts is awarded.",
           },
           {
             title: "Large loss after X wins (possible revenge trade)",
@@ -174,7 +162,7 @@ export default function ScoreGuidePage() {
           },
           {
             title: "First trade",
-            body: "No prior trades exist to establish streak context. A neutral 5 pts is awarded.",
+            body: "No prior trades exist to establish streak context. A neutral 3 pts is awarded.",
           },
         ].map((item) => (
           <div key={item.title} style={{ borderTop: "1px solid var(--bg-border)", paddingTop: 14 }}>

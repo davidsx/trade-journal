@@ -212,7 +212,7 @@ export interface TradeScore {
 //
 // Prime  = first hour of London (08:00–09:00 UTC / 16:00–17:00 HKT)
 //        + first hour of NY     (13:30–14:30 UTC / 21:30–22:30 HKT)
-// Lowest = after 23:30 HKT = after 15:30 UTC (late NY + off-hours)
+// New York Afternoon (11:30pm–1:30am HKT) = 15:30–17:30 UTC (5 pts); after 1:30am HKT → 0
 function getSessionTimingScore(entryTime: Date): { pts: number; note: string } {
   const utcHour = entryTime.getUTCHours();
   const utcMin = entryTime.getUTCMinutes();
@@ -228,14 +228,20 @@ function getSessionTimingScore(entryTime: Date): { pts: number; note: string } {
     (utcTotal >= londonOpenStart && utcTotal < londonOpenEnd) ||
     (utcTotal >= nyOpenStart     && utcTotal < nyOpenEnd)
   ) {
-    return { pts: 10, note: "Entry at session open (prime)" };
+    return { pts: 15, note: "Entry at session open (prime)" };
   }
 
-  if (utcTotal >= lateNightCutoff) {
-    return { pts: 0, note: "Entry after 11:30pm HKT (low activity)" };
+  // New York Afternoon: 11:30pm–1:30am HKT = 15:30–17:30 UTC (still some flow vs. deep overnight)
+  const lateNightEndUtc = 17 * 60 + 30; // 17:30 UTC
+  if (utcTotal >= lateNightCutoff && utcTotal < lateNightEndUtc) {
+    return { pts: 5, note: "Entry New York Afternoon — 11:30pm–1:30am HKT (reduced liquidity)" };
   }
 
-  return { pts: 5, note: "Entry during regular session hours" };
+  if (utcTotal >= lateNightEndUtc) {
+    return { pts: 0, note: "Entry after 1:30am HKT (low activity)" };
+  }
+
+  return { pts: 10, note: "Entry during regular session hours" };
 }
 
 function getPositionSizingScore(
@@ -250,51 +256,46 @@ function getPositionSizingScore(
   const exposure = qty * entryPrice * pointValue * 0.01;
   const pct = exposure / capitalBefore;
 
-  if (pct <= 0.05) return { pts: 5, note: `Position size: 1% move = ${(pct * 100).toFixed(1)}% of capital (conservative)` };
-  if (pct <= 0.15) return { pts: 3, note: `Position size: 1% move = ${(pct * 100).toFixed(1)}% of capital (moderate)` };
+  if (pct <= 0.05) {
+    return { pts: 10, note: `Position size: 1% move = ${(pct * 100).toFixed(1)}% of capital (conservative)` };
+  }
+  if (pct <= 0.1) {
+    return { pts: 7, note: `Position size: 1% move = ${(pct * 100).toFixed(1)}% of capital (moderate 5–10%)` };
+  }
+  if (pct <= 0.15) {
+    return { pts: 4, note: `Position size: 1% move = ${(pct * 100).toFixed(1)}% of capital (moderate 10–15%)` };
+  }
   return { pts: 0, note: `Position size: 1% move = ${(pct * 100).toFixed(1)}% of capital (oversized)` };
 }
 
-function getExitRelativeScore(
+function getExitReturnOnCapitalScore(
   netPnl: number,
-  medianWinPnl: number
+  capitalBefore: number
 ): { pts: number; note: string } {
-  if (medianWinPnl <= 0 || netPnl <= 0) {
-    if (netPnl <= 0) return { pts: 0, note: "Trade was a loss" };
-    return { pts: 8, note: "Profitable trade (no median benchmark yet)" };
+  if (netPnl <= 0) return { pts: 0, note: "Trade was a loss" };
+  if (capitalBefore <= 0) {
+    return { pts: 0, note: "Profitable trade (capital unknown)" };
   }
-  const ratio = netPnl / medianWinPnl;
-  if (ratio >= 1.5) return { pts: 15, note: `Exit captured ${ratio.toFixed(1)}× median winner` };
-  if (ratio >= 1.0) return { pts: 10, note: `Exit captured ${ratio.toFixed(1)}× median winner` };
-  if (ratio >= 0.5) return { pts: 5, note: `Exit captured ${ratio.toFixed(1)}× median winner (early exit)` };
-  return { pts: 0, note: `Exit captured only ${ratio.toFixed(1)}× median winner` };
+  const pct = (netPnl / capitalBefore) * 100;
+  if (pct > 2) return { pts: 15, note: `Exit +${pct.toFixed(2)}% of capital (>2%)` };
+  if (pct > 1.5) return { pts: 10, note: `Exit +${pct.toFixed(2)}% of capital (>1.5%)` };
+  if (pct > 1) return { pts: 5, note: `Exit +${pct.toFixed(2)}% of capital (>1%)` };
+  return { pts: 0, note: `Exit +${pct.toFixed(2)}% of capital (≤1%)` };
 }
 
-function getHoldTimeScore(
-  holdingMins: number,
-  medianHoldMins: number
-): { pts: number; note: string } {
-  if (medianHoldMins <= 0) return { pts: 5, note: "Hold time: no median benchmark yet" };
-  const ratio = holdingMins / medianHoldMins;
-  if (ratio >= 0.5 && ratio <= 2.0) {
-    return { pts: 10, note: `Hold time ${holdingMins.toFixed(0)}m (${ratio.toFixed(1)}× median)` };
+function getHoldTimeScore(holdingMins: number): { pts: number; note: string } {
+  const m = holdingMins;
+  if (m < 1) {
+    return { pts: 10, note: `Hold ${m.toFixed(1)}m (<1 min)` };
   }
-  if (ratio < 0.5) {
-    return { pts: 2, note: `Short hold ${holdingMins.toFixed(0)}m (${ratio.toFixed(1)}× median, possible early exit)` };
+  if (m < 15) {
+    return { pts: 7, note: `Hold ${m.toFixed(0)}m (<15 min)` };
   }
-  return { pts: 6, note: `Long hold ${holdingMins.toFixed(0)}m (${ratio.toFixed(1)}× median, possible overstay)` };
-}
-
-function getRMultipleScore(
-  netPnl: number,
-  avgLoss: number
-): { pts: number; note: string } {
-  if (avgLoss >= 0) return { pts: 5, note: "R-multiple: no loss benchmark yet" };
-  const rMultiple = netPnl / Math.abs(avgLoss);
-  if (rMultiple >= 2.0) return { pts: 10, note: `R-multiple ${rMultiple.toFixed(1)}R (excellent)` };
-  if (rMultiple >= 1.0) return { pts: 7, note: `R-multiple ${rMultiple.toFixed(1)}R (good)` };
-  if (rMultiple >= 0.5) return { pts: 4, note: `R-multiple ${rMultiple.toFixed(1)}R (below target)` };
-  return { pts: 0, note: `R-multiple ${rMultiple.toFixed(1)}R (poor)` };
+  if (m < 60) {
+    return { pts: 4, note: `Hold ${m.toFixed(0)}m (<1 hour)` };
+  }
+  const label = m % 60 === 0 ? `${m / 60}h` : `${(m / 60).toFixed(1)}h`;
+  return { pts: 0, note: `Hold ${label} (≥1 hour)` };
 }
 
 function getStreakContextScore(
@@ -340,49 +341,11 @@ export function scoreTrades(trades: Trade[]): Trade[] {
   if (trades.length === 0) return [];
   const candles = loadCachedCandles();
 
-  // Pre-compute per-instrument stats for benchmarking
-  const byContract = new Map<
-    string,
-    { pnls: number[]; holdMins: number[]; losses: number[] }
-  >();
-  for (const t of trades) {
-    const s = byContract.get(t.contractName) ?? { pnls: [], holdMins: [], losses: [] };
-    s.pnls.push(t.netPnl);
-    s.holdMins.push(t.holdingMins);
-    if (t.netPnl < 0) s.losses.push(t.netPnl);
-    byContract.set(t.contractName, s);
-  }
-
-  const median = (arr: number[]): number => {
-    if (arr.length === 0) return 0;
-    const sorted = [...arr].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
-  };
-
-  const medianWinByContract = new Map<string, number>();
-  const medianHoldByContract = new Map<string, number>();
-  const avgLossByContract = new Map<string, number>();
-  for (const [contract, stats] of byContract) {
-    const wins = stats.pnls.filter((p) => p > 0);
-    medianWinByContract.set(contract, median(wins));
-    medianHoldByContract.set(contract, median(stats.holdMins));
-    avgLossByContract.set(
-      contract,
-      stats.losses.length > 0
-        ? stats.losses.reduce((a, b) => a + b, 0) / stats.losses.length
-        : 0
-    );
-  }
-
   return trades.map((trade, i) => {
     const notes: string[] = [];
     const pointValue = getPointValue(trade.contractName);
-    const medianWin = medianWinByContract.get(trade.contractName) ?? 0;
-    const medianHold = medianHoldByContract.get(trade.contractName) ?? 0;
-    const avgLoss = avgLossByContract.get(trade.contractName) ?? 0;
 
-    // Entry scores (max 40)
+    // Entry scores (max 70)
     const timing   = getSessionTimingScore(trade.entryTime);
     const sizing   = getPositionSizingScore(trade.qty, trade.entryPrice, pointValue, trade.capitalBefore);
     const imbalance = getImbalanceScore(trade.entryPrice, trade.entryTime, candles);
@@ -394,21 +357,19 @@ export function scoreTrades(trades: Trade[]): Trade[] {
 
     const entryScore = timing.pts + sizing.pts + imbalance.pts + breakout.pts;
 
-    // Exit scores (max 30)
-    const exitRel = getExitRelativeScore(trade.netPnl, medianWin);
-    const holdTime = getHoldTimeScore(trade.holdingMins, medianHold);
+    // Exit scores (max 25)
+    const exitRel = getExitReturnOnCapitalScore(trade.netPnl, trade.capitalBefore);
+    const holdTime = getHoldTimeScore(trade.holdingMins);
     notes.push(exitRel.note);
     notes.push(holdTime.note);
 
     const exitScore = exitRel.pts + holdTime.pts;
 
-    // Risk scores
-    const rMult = getRMultipleScore(trade.netPnl, avgLoss);
+    // Risk scores (max 5 — streak context only)
     const streakCtx = getStreakContextScore(i, trades, trade);
-    notes.push(rMult.note);
     notes.push(streakCtx.note);
 
-    const riskScore = rMult.pts + streakCtx.pts;
+    const riskScore = streakCtx.pts;
     const qualityScore = entryScore + exitScore + riskScore;
 
     return {

@@ -266,13 +266,11 @@ function BestStrips({
         <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{sS.title}</span>
         <span className="text-[var(--text-muted)]"> — {sS.detail}</span>
       </li>
-      {hasTrades ? (
-        <li>
-          <span className="font-medium" style={{ color: "var(--text-secondary)" }}>Hour: </span>
-          <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{hS.title}</span>
-          <span className="text-[var(--text-muted)]"> — {hS.detail}</span>
-        </li>
-      ) : null}
+      <li>
+        <span className="font-medium" style={{ color: "var(--text-secondary)" }}>Hour: </span>
+        <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{hS.title}</span>
+        <span className="text-[var(--text-muted)]"> — {hS.detail}</span>
+      </li>
       <li>
         <span className="font-medium" style={{ color: "var(--text-secondary)" }}>Weekday: </span>
         <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{wS.title}</span>
@@ -295,13 +293,11 @@ function BestStrips({
         <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{sP.title}</span>
         <span className="text-[var(--text-muted)]"> — {sP.detail}</span>
       </li>
-      {hasTrades ? (
-        <li>
-          <span className="font-medium" style={{ color: "var(--text-secondary)" }}>Hour: </span>
-          <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{hP.title}</span>
-          <span className="text-[var(--text-muted)]"> — {hP.detail}</span>
-        </li>
-      ) : null}
+      <li>
+        <span className="font-medium" style={{ color: "var(--text-secondary)" }}>Hour: </span>
+        <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{hP.title}</span>
+        <span className="text-[var(--text-muted)]"> — {hP.detail}</span>
+      </li>
       <li>
         <span className="font-medium" style={{ color: "var(--text-secondary)" }}>Weekday: </span>
         <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{wP.title}</span>
@@ -340,14 +336,14 @@ function BestStrips({
 export default function ScoreTimeMetricsTables({ session, hourly, weekday, holdTime }: Props) {
   const hasTrades = session.some((r) => r.tradeCount > 0);
   const sessionRows = rowsWithTradesOnly(session);
-  const hourlyRows = rowsWithTradesOnly(hourly);
+  const hourlyRowsWithTrades = rowsWithTradesOnly(hourly);
   const weekdayRows = rowsWithTradesOnly(weekday);
   const holdRows = rowsWithTradesOnly(holdTime);
 
   const bestSessionByScore = pickBestByAvgScore(sessionRows);
   const bestSessionByPnl = pickBestByAvgPnl(sessionRows);
-  const bestHourByScore = hasTrades ? pickBestByAvgScore(hourlyRows) : null;
-  const bestHourByPnl = hasTrades ? pickBestByAvgPnl(hourlyRows) : null;
+  const bestHourByScore = pickBestByAvgScore(hourlyRowsWithTrades);
+  const bestHourByPnl = pickBestByAvgPnl(hourlyRowsWithTrades);
   const bestWeekdayByScore = pickBestByAvgScore(weekdayRows);
   const bestWeekdayByPnl = pickBestByAvgPnl(weekdayRows);
   const bestHoldByScore = pickBestByAvgScore(holdRows);
@@ -356,19 +352,13 @@ export default function ScoreTimeMetricsTables({ session, hourly, weekday, holdT
   return (
     <div className="space-y-6">
       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-        {hasTrades ? (
-          <>
-            Session and hour use <strong className="text-[var(--text-secondary)]">entry time (HKT)</strong>.{" "}
-          </>
-        ) : (
-          <>
-            Session uses <strong className="text-[var(--text-secondary)]">entry time (HKT)</strong>.{" "}
-          </>
-        )}
+        Session and hour use <strong className="text-[var(--text-secondary)]">entry time (HKT)</strong>.{" "}
+        The hour table lists every HKT hour in <strong className="text-[var(--text-secondary)]">Globex trading-day</strong> order
+        (06:00 through 05:00), including hours with no trades.{" "}
         Weekday uses the <strong className="text-[var(--text-secondary)]">CME session trading day</strong> (HKT,
         06:00 session start — same as the calendar). <strong className="text-[var(--text-secondary)]">Hold time</strong>{" "}
         is minutes from entry to exit, in a multi-band hold spectrum. Avg quality uses scored trades; P&amp;L uses all trades in
-        the bucket. Empty buckets (no trades) are hidden. Summary cards: one for best <strong className="text-[var(--text-secondary)]">avg quality</strong> (scored trades only), one for best <strong className="text-[var(--text-secondary)]">avg P&amp;L</strong> (and that bucket&apos;s total).
+        the bucket. Empty buckets (no trades) are hidden, except the hour grid. Summary cards: one for best <strong className="text-[var(--text-secondary)]">avg quality</strong> (scored trades only), one for best <strong className="text-[var(--text-secondary)]">avg P&amp;L</strong> (and that bucket&apos;s total).
       </p>
 
       <BestStrips
@@ -383,8 +373,11 @@ export default function ScoreTimeMetricsTables({ session, hourly, weekday, holdT
         hasTrades={hasTrades}
       />
 
-      {/* md+: session | hours ; weekday | (hours continues). Single column: session → weekday → hours */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:items-stretch">
+      {/*
+        lg+: two columns — left: session, weekday, hold (stacked); right: by hour (stretches to full left height).
+        narrow: single column order — session, weekday, hold, then hour.
+      */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:items-stretch min-w-0">
         <div className="flex min-w-0 flex-col gap-6">
           <section
             className="rounded-lg p-4"
@@ -431,67 +424,66 @@ export default function ScoreTimeMetricsTables({ session, hourly, weekday, holdT
             </p>
             <MetricsTable rows={weekdayRows} bestByScore={bestWeekdayByScore} bestByPnl={bestWeekdayByPnl} />
           </section>
-        </div>
-
-        {hasTrades ? (
           <section
-            className="flex h-full min-h-0 min-w-0 flex-col rounded-lg p-4"
+            className="rounded-lg p-4"
             style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
           >
             <h2 className="text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
-              By hour of day
+              By hold time
             </h2>
-            <p className="mb-2 shrink-0 space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
-              <span className="block">HKT hour of entry (00:00–23:00).</span>
+            <p className="text-xs mb-2 space-y-1" style={{ color: "var(--text-muted)" }}>
+              <span className="block">
+                Time from entry to exit, split into <strong className="text-[var(--text-secondary)]">nine hold bands</strong> from
+                sub-minute through multi-hour (finer than the quality scorer’s four hold categories).
+              </span>
               <span className="block" style={{ color: "var(--accent)" }}>
-                Top score: {formatScoreBestCallout(bestHourByScore).title} —{" "}
-                {formatScoreBestCallout(bestHourByScore).detail}
+                Top score: {formatScoreBestCallout(bestHoldByScore).title} — {formatScoreBestCallout(bestHoldByScore).detail}
               </span>
               <span className="block" style={{ color: "var(--profit)" }}>
-                Top P&amp;L: {formatPnlBestCallout(bestHourByPnl).title} —{" "}
-                {formatPnlBestCallout(bestHourByPnl).detail}
+                Top P&amp;L: {formatPnlBestCallout(bestHoldByPnl).title} — {formatPnlBestCallout(bestHoldByPnl).detail}
               </span>
             </p>
-            <div className="flex min-h-0 max-lg:min-h-[20rem] flex-1 flex-col">
-              <MetricsTable
-                rows={hourlyRows}
-                dense
-                bestByScore={bestHourByScore}
-                bestByPnl={bestHourByPnl}
-                fillHeight
-              />
-            </div>
+            <MetricsTable
+              rows={holdRows}
+              bestByScore={bestHoldByScore}
+              bestByPnl={bestHoldByPnl}
+              firstColumnLabel="Hold time"
+            />
           </section>
-        ) : null}
-      </div>
+        </div>
 
-      <section
-        className="rounded-lg p-4"
-        style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
-      >
-        <h2 className="text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
-          By hold time
-        </h2>
-        <p className="text-xs mb-2 space-y-1" style={{ color: "var(--text-muted)" }}>
-          <span className="block">
-            Time from entry to exit, split into <strong className="text-[var(--text-secondary)]">nine hold bands</strong> from
-            sub-minute through multi-hour (finer than the quality scorer’s four hold categories).
-          </span>
-          <span className="block" style={{ color: "var(--accent)" }}>
-            Top score: {formatScoreBestCallout(bestHoldByScore).title} — {formatScoreBestCallout(bestHoldByScore).detail}
-          </span>
-          <span className="block" style={{ color: "var(--profit)" }}>
-            Top P&amp;L: {formatPnlBestCallout(bestHoldByPnl).title} — {formatPnlBestCallout(bestHoldByPnl).detail}
-          </span>
-        </p>
-        <MetricsTable
-          rows={holdRows}
-          dense
-          bestByScore={bestHoldByScore}
-          bestByPnl={bestHoldByPnl}
-          firstColumnLabel="Hold time"
-        />
-      </section>
+        <section
+          className="flex h-full w-full min-w-0 flex-col min-h-[20rem] rounded-lg p-4 lg:min-h-0"
+          style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
+        >
+          <h2 className="text-sm font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+            By hour of day
+          </h2>
+          <p className="mb-2 shrink-0 space-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
+            <span className="block">
+              HKT hour of entry, ordered from session open (06:00) through 05:00; every hour is shown, including with zero
+              trades.
+            </span>
+            <span className="block" style={{ color: "var(--accent)" }}>
+              Top score: {formatScoreBestCallout(bestHourByScore).title} —{" "}
+              {formatScoreBestCallout(bestHourByScore).detail}
+            </span>
+            <span className="block" style={{ color: "var(--profit)" }}>
+              Top P&amp;L: {formatPnlBestCallout(bestHourByPnl).title} —{" "}
+              {formatPnlBestCallout(bestHourByPnl).detail}
+            </span>
+          </p>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <MetricsTable
+              rows={hourly}
+              dense
+              bestByScore={bestHourByScore}
+              bestByPnl={bestHourByPnl}
+              fillHeight
+            />
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

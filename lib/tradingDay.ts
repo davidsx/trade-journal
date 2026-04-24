@@ -7,6 +7,9 @@
  */
 const HKT_OFFSET_MS = 8 * 60 * 60 * 1000;
 
+/** First HKT hour of the CME Globex *trading day* (after the 05:00–06:00 daily break). */
+export const GLOBEX_SESSION_START_HOUR_HKT = 6;
+
 export function tradingDayKeyHkt(instant: Date): string {
   const hktMs = instant.getTime() + HKT_OFFSET_MS;
   const hktDate = new Date(hktMs);

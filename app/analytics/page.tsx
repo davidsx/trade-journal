@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { computeSummaryMetrics } from "@/lib/analytics/metrics";
 import {
+  hktHoursInTradingDayOrder,
   scoreMetricsByHktHour,
   scoreMetricsByHoldingMins,
   scoreMetricsByTradingDayWeekday,
@@ -52,13 +53,48 @@ export default async function AnalyticsPage() {
   }));
 
   const sessionScoreRows = scoreMetricsBySession(trades);
-  const hourlyScoreRows = scoreMetricsByHktHour(trades);
+  const hourlyScoreRows = hktHoursInTradingDayOrder(scoreMetricsByHktHour(trades));
   const weekdayScoreRows = scoreMetricsByTradingDayWeekday(trades);
   const holdTimeScoreRows = scoreMetricsByHoldingMins(trades);
 
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-semibold">Analytics</h1>
+
+      {/* Summary stats */}
+      <div
+        className="rounded-lg p-4 grid grid-cols-2 gap-4 text-sm"
+        style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
+      >
+        <div>
+          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
+            Sharpe Ratio
+          </div>
+          <div className="font-semibold text-lg">{metrics.sharpeRatio.toFixed(2)}</div>
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
+            Sortino Ratio
+          </div>
+          <div className="font-semibold text-lg">{metrics.sortinoRatio.toFixed(2)}</div>
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
+            Avg Win
+          </div>
+          <div className="font-semibold" style={{ color: "var(--profit)" }}>
+            ${metrics.avgWin.toFixed(2)}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
+            Avg Loss
+          </div>
+          <div className="font-semibold" style={{ color: "var(--loss)" }}>
+            ${metrics.avgLoss.toFixed(2)}
+          </div>
+        </div>
+      </div>
 
       {/* Drawdown */}
       <div
@@ -115,41 +151,6 @@ export default async function AnalyticsPage() {
           Score vs Net P&L
         </h2>
         <ScorePnlChart points={scorePnlPoints} bucketAvgs={bucketAvgs} />
-      </div>
-
-      {/* Summary stats */}
-      <div
-        className="rounded-lg p-4 grid grid-cols-2 gap-4 text-sm"
-        style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
-      >
-        <div>
-          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
-            Sharpe Ratio
-          </div>
-          <div className="font-semibold text-lg">{metrics.sharpeRatio.toFixed(2)}</div>
-        </div>
-        <div>
-          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
-            Sortino Ratio
-          </div>
-          <div className="font-semibold text-lg">{metrics.sortinoRatio.toFixed(2)}</div>
-        </div>
-        <div>
-          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
-            Avg Win
-          </div>
-          <div className="font-semibold" style={{ color: "var(--profit)" }}>
-            ${metrics.avgWin.toFixed(2)}
-          </div>
-        </div>
-        <div>
-          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
-            Avg Loss
-          </div>
-          <div className="font-semibold" style={{ color: "var(--loss)" }}>
-            ${metrics.avgLoss.toFixed(2)}
-          </div>
-        </div>
       </div>
     </div>
   );

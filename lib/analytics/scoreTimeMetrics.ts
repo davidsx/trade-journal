@@ -1,6 +1,6 @@
 import type { TradeModel as Trade } from "@/app/generated/prisma/models";
 import { getEntrySessionName, type SessionName } from "@/lib/analytics/patterns";
-import { tradingDayWeekdayIndexHkt } from "@/lib/tradingDay";
+import { GLOBEX_SESSION_START_HOUR_HKT, tradingDayWeekdayIndexHkt } from "@/lib/tradingDay";
 
 const HKT_OFFSET_MS = 8 * 60 * 60 * 1000;
 
@@ -91,6 +91,19 @@ export function scoreMetricsByHktHour(trades: readonly Trade[]) {
     const pad = String(hour).padStart(2, "0");
     return finishRow(a, { label: `${pad}:00`, sublabel: "HKT" });
   });
+}
+
+/**
+ * `scoreMetricsByHktHour` returns civil order 00:00…23:00. This reorders to the Globex
+ * **trading day** (06:00 HKT through 05:00 HKT) so the first row is session open.
+ */
+export function hktHoursInTradingDayOrder<T extends { label: string; sublabel?: string }>(rows: readonly T[]): T[] {
+  if (rows.length !== 24) return [...rows];
+  const s = GLOBEX_SESSION_START_HOUR_HKT;
+  const out: T[] = [];
+  for (let h = s; h < 24; h++) out.push(rows[h]!);
+  for (let h = 0; h < s; h++) out.push(rows[h]!);
+  return out;
 }
 
 /**

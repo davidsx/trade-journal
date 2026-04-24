@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/db/prisma";
 import { computeSummaryMetrics } from "@/lib/analytics/metrics";
 import { getAccountSettings } from "@/lib/accountSettings";
@@ -36,6 +37,12 @@ export default async function DashboardPage() {
         <h1 className="text-xl font-semibold">Dashboard</h1>
         <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>
           {metrics.totalTrades} trades loaded
+        </p>
+        <p className="text-sm mt-2">
+          <Link href="/insights" className="underline-offset-2 hover:underline" style={{ color: "var(--accent)" }}>
+            Insights
+          </Link>
+          <span style={{ color: "var(--text-muted)" }}> — conditions in your best-scoring trades and top scores</span>
         </p>
       </div>
 

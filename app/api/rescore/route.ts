@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import { warmCandleCacheForScoring } from "@/lib/candles/warmForScoring";
 import { scoreTrades } from "@/lib/analytics/scorer";
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const trades = await prisma.trade.findMany({ orderBy: { entryTime: "asc" } });
 
     if (trades.length === 0) {
       return NextResponse.json({ updated: 0 });
     }
+
+    await warmCandleCacheForScoring(new URL(request.url).origin);
 
     const scored = scoreTrades(trades);
     await Promise.all(

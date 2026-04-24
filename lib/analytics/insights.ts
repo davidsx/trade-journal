@@ -1,9 +1,9 @@
 import type { TradeModel as Trade } from "@/app/generated/prisma/models";
 
 // ── Parsed conditions from scoreNotes ────────────────────────────────────────
-// scoreNotes is a JSON array of 8 strings (in order):
+// scoreNotes is a JSON array of 7 strings (see `scoreTrades` in scorer.ts), in order:
 //   [0] session timing  [1] position sizing  [2] imbalance  [3] breakout
-//   [4] exit relative   [5] hold time        [6] r-multiple [7] streak context
+//   [4] exit relative   [5] hold time       [6] streak context
 
 export type SessionCategory = "prime" | "regular" | "low-activity";
 export type SizingCategory = "conservative" | "moderate" | "oversized";
@@ -33,7 +33,7 @@ export function parseScoreNotes(notesJson: string | null): ParsedConditions | nu
   } catch {
     return null;
   }
-  if (!Array.isArray(notes) || notes.length < 8) return null;
+  if (!Array.isArray(notes) || notes.length < 7) return null;
 
   // [0] session timing
   let session: SessionCategory = "regular";
@@ -66,10 +66,11 @@ export function parseScoreNotes(notesJson: string | null): ParsedConditions | nu
   // [3] breakout
   const breakout: BreakoutCategory = notes[3].includes("Breakout through") ? "yes" : "no";
 
-  // [7] streak context
+  // [6] streak context (last note in current 7-note format)
+  const streakNote = notes[6] ?? "";
   let streak: StreakCategory = "normal";
-  if (notes[7].includes("discipline")) streak = "discipline";
-  else if (notes[7].includes("revenge") || notes[7].includes("possible revenge")) streak = "revenge";
+  if (streakNote.includes("discipline")) streak = "discipline";
+  else if (streakNote.includes("revenge") || streakNote.includes("possible revenge")) streak = "revenge";
 
   return { session, sizing, imbalance, breakout, streak };
 }

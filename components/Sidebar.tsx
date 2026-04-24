@@ -57,19 +57,20 @@ export default function Sidebar() {
 
   return (
     <nav
-      className="flex-shrink-0 flex flex-col py-6 border-r transition-all duration-200"
+      className="flex min-h-0 min-w-0 shrink-0 flex-col py-6 border-r transition-all duration-200"
       style={{
         width: collapsed ? 56 : 208,
         background: "var(--bg-card)",
         borderColor: "var(--bg-border)",
         height: "100vh",
+        maxHeight: "100dvh",
         position: "sticky",
         top: 0,
         overflow: "hidden",
       }}
     >
       {/* Header */}
-      <div className={`mb-8 ${collapsed ? "px-3" : "px-4"}`}>
+      <div className={`shrink-0 ${collapsed ? "mb-4 px-3" : "mb-6 px-4"}`}>
         {collapsed ? (
           <div className="text-sm font-semibold text-center" style={{ color: "var(--accent)" }}>P</div>
         ) : (
@@ -80,8 +81,11 @@ export default function Sidebar() {
         )}
       </div>
 
-      {/* Nav links */}
-      <ul className="flex flex-col gap-1 flex-1 px-2">
+      {/* Nav links — scroll on short viewports so items below the fold (e.g. Insights) stay reachable */}
+      <ul
+        className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden px-2"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
         {NAV.map((item) => {
           const active = pathname === item.href;
           return (
@@ -105,12 +109,17 @@ export default function Sidebar() {
         })}
       </ul>
 
-      {!collapsed && <div className="px-2"><CsvUpload /></div>}
+      {!collapsed && (
+        <div className="mt-1 shrink-0 px-2">
+          <CsvUpload />
+        </div>
+      )}
 
       {/* Toggle button */}
       <button
+        type="button"
         onClick={() => setCollapsed((c) => !c)}
-        className="mt-4 mx-auto flex items-center justify-center rounded-md text-xs transition-colors"
+        className="mt-4 mb-1 mx-auto flex shrink-0 items-center justify-center rounded-md text-xs transition-colors"
         style={{
           width: 32,
           height: 24,

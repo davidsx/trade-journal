@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAccountSettings, upsertAccountSettings } from "@/lib/accountSettings";
+import { warmCandleCacheForScoring } from "@/lib/candles/warmForScoring";
 import { finalizeCsvAccountScoring } from "@/lib/import/csvAccountServer";
 
 export const runtime = "nodejs";
@@ -27,6 +28,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   await upsertAccountSettings({ initialBalance });
+  await warmCandleCacheForScoring(req.nextUrl.origin);
   await finalizeCsvAccountScoring(initialBalance);
 
   const settings = await getAccountSettings();

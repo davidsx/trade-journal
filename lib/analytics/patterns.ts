@@ -227,6 +227,11 @@ function getSession(utcHour: number, utcMinute: number): SessionName {
   return "Off-hours";
 }
 
+/** Map entry instant (stored in UTC) to chart session: Asia / London / NY / Off-hours. */
+export function getEntrySessionName(entryTime: Date): SessionName {
+  return getSession(entryTime.getUTCHours(), entryTime.getUTCMinutes());
+}
+
 export function analyzeSessionPerformance(trades: Trade[]): SessionPattern[] {
   const DEFS: { session: SessionName; hktRange: string }[] = [
     { session: "Asia",      hktRange: "8:00am – 4:00pm" },

@@ -1,11 +1,17 @@
 import { prisma } from "@/lib/db/prisma";
 import { computeSummaryMetrics } from "@/lib/analytics/metrics";
+import {
+  scoreMetricsByHktHour,
+  scoreMetricsByTradingDayWeekday,
+  scoreMetricsBySession,
+} from "@/lib/analytics/scoreTimeMetrics";
 import { getAccountSettings } from "@/lib/accountSettings";
 import DrawdownChart from "@/components/DrawdownChart";
 import PnlBarChart from "@/components/PnlBarChart";
 import ScoreDistributionChart from "@/components/ScoreDistributionChart";
 import ScorePnlChart from "@/components/ScorePnlChart";
 import type { ScorePnlPoint } from "@/components/ScorePnlChart";
+import ScoreTimeMetricsTables from "@/components/ScoreTimeMetricsTables";
 
 export default async function AnalyticsPage() {
   const settings = await getAccountSettings();
@@ -14,15 +20,16 @@ export default async function AnalyticsPage() {
     initialBalance: settings.initialBalance,
   });
 
-  // Score distribution
-  const buckets = Array.from({ length: 10 }, (_, i) => ({
-    range: `${i * 10}–${i * 10 + 9}`,
+  // Score distribution: one bar per integer 0..100 (chart shows separated points, not 10-point bands)
+  const scoreDistBuckets = Array.from({ length: 101 }, (_, s) => ({
+    range: String(s),
+    bin: s,
     count: 0,
   }));
   for (const t of trades) {
     if (t.qualityScore !== null) {
-      const idx = Math.min(Math.floor(t.qualityScore / 10), 9);
-      buckets[idx].count++;
+      const s = Math.round(Math.min(100, Math.max(0, t.qualityScore)));
+      scoreDistBuckets[s].count++;
     }
   }
 
@@ -42,6 +49,10 @@ export default async function AnalyticsPage() {
     avgPnl: b.count > 0 ? b.sum / b.count : 0,
     count: b.count,
   }));
+
+  const sessionScoreRows = scoreMetricsBySession(trades);
+  const hourlyScoreRows = scoreMetricsByHktHour(trades);
+  const weekdayScoreRows = scoreMetricsByTradingDayWeekday(trades);
 
   return (
     <div className="space-y-6">
@@ -82,8 +93,15 @@ export default async function AnalyticsPage() {
         <h2 className="text-sm font-medium mb-4" style={{ color: "var(--text-secondary)" }}>
           Trade Quality Score Distribution
         </h2>
-        <ScoreDistributionChart buckets={buckets} />
+        <ScoreDistributionChart buckets={scoreDistBuckets} />
       </div>
+
+      {/* Session / hour / weekday — quality score */}
+      <ScoreTimeMetricsTables
+        session={sessionScoreRows}
+        hourly={hourlyScoreRows}
+        weekday={weekdayScoreRows}
+      />
 
       {/* Score vs P&L */}
       <div

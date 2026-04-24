@@ -15,6 +15,17 @@ import ScorePnlChart from "@/components/ScorePnlChart";
 import type { ScorePnlPoint } from "@/components/ScorePnlChart";
 import ScoreTimeMetricsTables from "@/components/ScoreTimeMetricsTables";
 
+function formatAvgHoldMins(mins: number) {
+  if (mins < 60) return `${Math.round(mins)}m`;
+  return `${(mins / 60).toFixed(1)}h`;
+}
+
+/** Profit factor uses 999 as “no losing trades” in `computeProfitFactor`. */
+function formatProfitFactor(pf: number) {
+  if (pf >= 90) return "∞";
+  return pf.toFixed(2);
+}
+
 export default async function AnalyticsPage() {
   const settings = await getAccountSettings();
   const trades = await prisma.trade.findMany({ orderBy: { entryTime: "asc" } });
@@ -61,37 +72,97 @@ export default async function AnalyticsPage() {
     <div className="space-y-6">
       <h1 className="text-xl font-semibold">Analytics</h1>
 
-      {/* Summary stats */}
+      {/* Summary stats — P&L, execution, and quality (see home for Sharpe / Sortino) */}
       <div
-        className="rounded-lg p-4 grid grid-cols-2 gap-4 text-sm"
+        className="rounded-lg p-4 grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm"
         style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
       >
         <div>
           <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
-            Sharpe Ratio
+            Net P&amp;L
           </div>
-          <div className="font-semibold text-lg">{metrics.sharpeRatio.toFixed(2)}</div>
-        </div>
-        <div>
-          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
-            Sortino Ratio
-          </div>
-          <div className="font-semibold text-lg">{metrics.sortinoRatio.toFixed(2)}</div>
-        </div>
-        <div>
-          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
-            Avg Win
-          </div>
-          <div className="font-semibold" style={{ color: "var(--profit)" }}>
-            ${metrics.avgWin.toFixed(2)}
+          <div
+            className="font-semibold text-lg"
+            style={{
+              color:
+                metrics.totalNetPnl > 0 ? "var(--profit)" : metrics.totalNetPnl < 0 ? "var(--loss)" : "var(--text-primary)",
+            }}
+          >
+            {metrics.totalNetPnl >= 0 ? "+" : "−"}${Math.abs(metrics.totalNetPnl).toFixed(2)}
           </div>
         </div>
         <div>
           <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
-            Avg Loss
+            Avg / trade
           </div>
-          <div className="font-semibold" style={{ color: "var(--loss)" }}>
-            ${metrics.avgLoss.toFixed(2)}
+          <div
+            className="font-semibold text-lg"
+            style={{
+              color:
+                metrics.avgNetPnl > 0 ? "var(--profit)" : metrics.avgNetPnl < 0 ? "var(--loss)" : "var(--text-primary)",
+            }}
+          >
+            {metrics.totalTrades === 0
+              ? "—"
+              : `${metrics.avgNetPnl >= 0 ? "+" : "−"}$${Math.abs(metrics.avgNetPnl).toFixed(2)}`}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
+            Win rate
+          </div>
+          <div className="font-semibold text-lg" style={{ color: "var(--text-primary)" }}>
+            {metrics.totalTrades === 0 ? "—" : `${(metrics.winRate * 100).toFixed(1)}%`}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
+            Profit factor
+          </div>
+          <div className="font-semibold text-lg" style={{ color: "var(--text-primary)" }}>
+            {metrics.totalTrades === 0 ? "—" : formatProfitFactor(metrics.profitFactor)}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
+            Trades (W / L)
+          </div>
+          <div className="font-semibold text-lg tabular-nums" style={{ color: "var(--text-primary)" }}>
+            {metrics.totalTrades === 0
+              ? "—"
+              : `${metrics.totalTrades} (${metrics.winningTrades} / ${metrics.losingTrades})`}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
+            Avg win
+          </div>
+          <div className="font-semibold text-lg" style={{ color: "var(--profit)" }}>
+            {metrics.winningTrades === 0 ? "—" : `$${metrics.avgWin.toFixed(2)}`}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
+            Avg loss
+          </div>
+          <div className="font-semibold text-lg" style={{ color: "var(--loss)" }}>
+            {metrics.losingTrades === 0 ? "—" : `$${metrics.avgLoss.toFixed(2)}`}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
+            Avg quality
+          </div>
+          <div className="font-semibold text-lg" style={{ color: "var(--text-primary)" }}>
+            {metrics.avgQualityScore === null ? "—" : metrics.avgQualityScore.toFixed(1)}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
+            Avg hold
+          </div>
+          <div className="font-semibold text-lg" style={{ color: "var(--text-primary)" }}>
+            {metrics.totalTrades === 0 ? "—" : formatAvgHoldMins(metrics.avgHoldingMins)}
           </div>
         </div>
       </div>

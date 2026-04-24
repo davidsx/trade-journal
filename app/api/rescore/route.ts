@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
+import { getActiveAccountId } from "@/lib/activeAccount";
+import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 import { warmCandleCacheForScoring } from "@/lib/candles/warmForScoring";
 import { scoreTrades } from "@/lib/analytics/scorer";
 
 export async function POST(request: Request) {
   try {
-    const trades = await prisma.trade.findMany({ orderBy: { entryTime: "asc" } });
+    const accountId = await getActiveAccountId();
+    const trades = await prisma.trade.findMany({ where: tradesWhere(accountId), orderBy: { entryTime: "asc" } });
 
     if (trades.length === 0) {
       return NextResponse.json({ updated: 0 });

@@ -7,9 +7,25 @@ datasource db {
   provider = "postgresql"
 }
 
+/** Prop / SIM / cleared account; starting capital lives only on this row. */
+model Account {
+  id              Int      @id @default(autoincrement())
+  name            String
+  /** Starting account size for equity curve, capital chain, and CSV import (single source per account). */
+  initialBalance  Float    @default(50000)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  trades Trade[]
+  fills  Fill[]
+
+  @@map("Account")
+}
+
 model Fill {
   id           String   @id
   accountId    Int
+  account      Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   contractId   Int
   contractName String
   action       String
@@ -24,15 +40,10 @@ model Fill {
   @@index([accountId, timestamp])
 }
 
-model AccountSettings {
-  id             Int      @id @default(1)
-  initialBalance Float    @default(50000)
-  updatedAt      DateTime @updatedAt
-}
-
 model Trade {
   id            String   @id @default(cuid())
   accountId     Int
+  account       Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   contractId    Int
   contractName  String
   direction     String

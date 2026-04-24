@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { getActiveAccountId } from "@/lib/activeAccount";
+import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 import TradeModal from "@/components/TradeModal";
 import TradeDetail from "@/components/TradeDetail";
@@ -10,7 +12,8 @@ export default async function TradeModalPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const trade = await prisma.trade.findUnique({ where: { id } });
+  const accountId = await getActiveAccountId();
+  const trade = await prisma.trade.findFirst({ where: tradesWhere(accountId, { id }) });
   if (!trade) notFound();
 
   const dayCandles = loadDayCandles(new Date(trade.entryTime));

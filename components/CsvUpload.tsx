@@ -44,12 +44,17 @@ export default function CsvUpload() {
       const text = await file.text();
       const rows = parseCsv(text);
       const settingsRes = await fetch("/api/settings");
-      const settings = (await settingsRes.json()) as { initialBalance?: number };
+      const settings = (await settingsRes.json()) as {
+        initialBalance?: number;
+        accountId?: number;
+      };
       const initialBalance =
         typeof settings.initialBalance === "number" && settings.initialBalance > 0
           ? settings.initialBalance
           : DEFAULT_INITIAL_BALANCE;
-      const trades = csvRowsToTrades(rows, 1, initialBalance);
+      const accountId =
+        typeof settings.accountId === "number" && settings.accountId > 0 ? settings.accountId : 1;
+      const trades = csvRowsToTrades(rows, accountId, initialBalance);
       const total = trades.length;
 
       setMessage("1/3 Checking overlap…");

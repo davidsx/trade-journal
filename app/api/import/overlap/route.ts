@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getActiveAccountId } from "@/lib/activeAccount";
+import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
-import { CSV_ACCOUNT_ID } from "@/lib/import/csvAccountServer";
 
 export const runtime = "nodejs";
 
@@ -22,8 +23,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `At most ${MAX_IDS} ids` }, { status: 400 });
     }
 
+    const accountId = await getActiveAccountId();
     const replacedCount = await prisma.trade.count({
-      where: { accountId: CSV_ACCOUNT_ID, id: { in: csvIds } },
+      where: tradesWhere(accountId, { id: { in: csvIds } }),
     });
 
     return NextResponse.json({ replacedCount });

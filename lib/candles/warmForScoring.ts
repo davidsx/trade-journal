@@ -5,9 +5,11 @@ import { getCandleFetchRangeFromTrades } from "@/lib/tradeCandleBounds";
  * The scorer needs this file for imbalance (up to 40) + breakout (5) points.
  */
 export async function warmCandleCacheForScoring(
-  appOrigin: string
+  appOrigin: string,
+  /** When changing capital for a non-active account, pass its id so the candle range matches its trades. */
+  accountId?: number
 ): Promise<{ ok: boolean; barCount: number; error?: string }> {
-  const range = await getCandleFetchRangeFromTrades();
+  const range = await getCandleFetchRangeFromTrades(accountId);
   if (range.tradeCount === 0) {
     return { ok: true, barCount: 0 };
   }

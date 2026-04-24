@@ -1,3 +1,5 @@
+import { getActiveAccountId } from "@/lib/activeAccount";
+import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 import { computeSummaryMetrics } from "@/lib/analytics/metrics";
 import {
@@ -27,8 +29,8 @@ function formatProfitFactor(pf: number) {
 }
 
 export default async function AnalyticsPage() {
-  const settings = await getAccountSettings();
-  const trades = await prisma.trade.findMany({ orderBy: { entryTime: "asc" } });
+  const [settings, accountId] = await Promise.all([getAccountSettings(), getActiveAccountId()]);
+  const trades = await prisma.trade.findMany({ where: tradesWhere(accountId), orderBy: { entryTime: "asc" } });
   const metrics = computeSummaryMetrics(trades, {
     initialBalance: settings.initialBalance,
   });

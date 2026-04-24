@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getActiveAccountId } from "@/lib/activeAccount";
+import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 
 export async function GET(
@@ -6,7 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const trade = await prisma.trade.findUnique({ where: { id } });
+  const accountId = await getActiveAccountId();
+  const trade = await prisma.trade.findFirst({ where: tradesWhere(accountId, { id }) });
   if (!trade) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }

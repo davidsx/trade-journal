@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import { getActiveAccountId } from "@/lib/activeAccount";
+import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 
 export async function GET() {
+  const accountId = await getActiveAccountId();
   const trades = await prisma.trade.findMany({
     select: { qualityScore: true },
-    where: { qualityScore: { not: null } },
+    where: tradesWhere(accountId, { qualityScore: { not: null } }),
   });
 
   const buckets = Array.from({ length: 10 }, (_, i) => ({

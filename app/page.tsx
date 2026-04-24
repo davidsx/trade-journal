@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { getActiveAccountId } from "@/lib/activeAccount";
+import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 import { computeSummaryMetrics } from "@/lib/analytics/metrics";
 import { getAccountSettings } from "@/lib/accountSettings";
 import StatCard from "@/components/StatCard";
 import EquityCurve from "@/components/EquityCurve";
 import TradingCalendar from "@/components/TradingCalendar";
-import AccountSettingsForm from "@/components/AccountSettingsForm";
 
 function fmtUsd(v: number) {
   return `${v >= 0 ? "+" : "-"}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -16,8 +17,8 @@ function fmtPct(v: number) {
 }
 
 export default async function DashboardPage() {
-  const settings = await getAccountSettings();
-  const trades = await prisma.trade.findMany({ orderBy: { entryTime: "asc" } });
+  const [settings, accountId] = await Promise.all([getAccountSettings(), getActiveAccountId()]);
+  const trades = await prisma.trade.findMany({ where: tradesWhere(accountId), orderBy: { entryTime: "asc" } });
   const metrics = computeSummaryMetrics(trades, {
     initialBalance: settings.initialBalance,
   });
@@ -44,16 +45,16 @@ export default async function DashboardPage() {
           </Link>
           <span style={{ color: "var(--text-muted)" }}> — conditions in your best-scoring trades and top scores</span>
         </p>
-      </div>
-
-      <div
-        className="rounded-lg p-4"
-        style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
-      >
-        <h2 className="text-sm font-medium mb-3" style={{ color: "var(--text-secondary)" }}>
-          Account settings
-        </h2>
-        <AccountSettingsForm key={String(settings.initialBalance)} compact initialBalance={settings.initialBalance} />
+        <p className="text-sm mt-2" style={{ color: "var(--text-muted)" }}>
+          Starting capital for the equity curve:{" "}
+          <span style={{ color: "var(--text-secondary)" }}>
+            ${settings.initialBalance.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+          </span>
+          .{" "}
+          <Link href="/accounts" className="underline-offset-2 hover:underline" style={{ color: "var(--accent)" }}>
+            Change on Accounts
+          </Link>
+        </p>
       </div>
 
       {/* Stat cards */}

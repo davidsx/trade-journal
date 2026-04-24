@@ -1,32 +1,29 @@
 import { prisma } from "@/lib/db/prisma";
+import { getActiveAccountId } from "@/lib/activeAccount";
 import { DEFAULT_INITIAL_BALANCE } from "@/lib/accountConstants";
 
 export type AccountSettingsDTO = {
   initialBalance: number;
+  accountId: number;
+  accountName: string;
 };
 
+/**
+ * Starting capital and display name: always read from the `Account` row (no separate settings table).
+ */
 export async function getAccountSettings(): Promise<AccountSettingsDTO> {
-  const row = await prisma.accountSettings.findUnique({ where: { id: 1 } });
-  if (!row) {
-    return { initialBalance: DEFAULT_INITIAL_BALANCE };
+  const accountId = await getActiveAccountId();
+  const acc = await prisma.account.findUnique({ where: { id: accountId } });
+  if (!acc) {
+    return {
+      initialBalance: DEFAULT_INITIAL_BALANCE,
+      accountId,
+      accountName: "Account",
+    };
   }
   return {
-    initialBalance: row.initialBalance,
-  };
-}
-
-export async function upsertAccountSettings(data: { initialBalance: number }): Promise<AccountSettingsDTO> {
-  const row = await prisma.accountSettings.upsert({
-    where: { id: 1 },
-    create: {
-      id: 1,
-      initialBalance: data.initialBalance,
-    },
-    update: {
-      initialBalance: data.initialBalance,
-    },
-  });
-  return {
-    initialBalance: row.initialBalance,
+    initialBalance: acc.initialBalance,
+    accountId: acc.id,
+    accountName: acc.name,
   };
 }

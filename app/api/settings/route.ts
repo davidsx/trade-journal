@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAccountSettings, upsertAccountSettings } from "@/lib/accountSettings";
-import { warmCandleCacheForScoring } from "@/lib/candles/warmForScoring";
-import { finalizeCsvAccountScoring } from "@/lib/import/csvAccountServer";
+import { getAccountSettings } from "@/lib/accountSettings";
+import { getActiveAccountId } from "@/lib/activeAccount";
+import { applyAccountInitialBalance } from "@/lib/applyAccountCapital";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   const settings = await getAccountSettings();
-  return NextResponse.json(settings);
+  return NextResponse.json({
+    initialBalance: settings.initialBalance,
+    accountId: settings.accountId,
+    accountName: settings.accountName,
+  });
 }
 
 export async function PATCH(req: NextRequest) {
@@ -27,10 +31,18 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "initialBalance must be a positive number" }, { status: 400 });
   }
 
-  await upsertAccountSettings({ initialBalance });
-  await warmCandleCacheForScoring(req.nextUrl.origin);
-  await finalizeCsvAccountScoring(initialBalance);
+  const activeId = await getActiveAccountId();
+  try {
+    await applyAccountInitialBalance(activeId, initialBalance, req.nextUrl.origin);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Update failed";
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
 
   const settings = await getAccountSettings();
-  return NextResponse.json(settings);
+  return NextResponse.json({
+    initialBalance: settings.initialBalance,
+    accountId: settings.accountId,
+    accountName: settings.accountName,
+  });
 }

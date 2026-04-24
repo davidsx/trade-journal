@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getActiveAccountId } from "@/lib/activeAccount";
+import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 import { warmCandleCacheForScoring } from "@/lib/candles/warmForScoring";
-import { CSV_ACCOUNT_ID, finalizeCsvAccountScoring } from "@/lib/import/csvAccountServer";
+import { finalizeCsvAccountScoring } from "@/lib/import/csvAccountServer";
 
 type ScoreBody = {
   rowsInCsv?: number;
@@ -21,7 +23,8 @@ export async function runImportScorePost(req: NextRequest): Promise<NextResponse
   await warmCandleCacheForScoring(req.nextUrl.origin);
   await finalizeCsvAccountScoring();
 
-  const totalTrades = await prisma.trade.count({ where: { accountId: CSV_ACCOUNT_ID } });
+  const accountId = await getActiveAccountId();
+  const totalTrades = await prisma.trade.count({ where: tradesWhere(accountId) });
 
   const rowsInCsv = body.rowsInCsv;
   const replaced = body.replacedCount;

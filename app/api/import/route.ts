@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseCsv, csvRowsToTrades } from "@/lib/csv/parser";
+import { getActiveAccountId } from "@/lib/activeAccount";
+import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 import { getAccountSettings } from "@/lib/accountSettings";
-import { CSV_ACCOUNT_ID, upsertImportedTrades } from "@/lib/import/csvAccountServer";
+import { upsertImportedTrades } from "@/lib/import/csvAccountServer";
 
 /** Prisma + DB; Edge is unsupported for this route. */
 export const runtime = "nodejs";
@@ -24,17 +26,17 @@ export async function POST(req: NextRequest) {
 
     const text = await (file as Blob).text();
     const rows = parseCsv(text);
-    const settings = await getAccountSettings();
-    const trades = csvRowsToTrades(rows, CSV_ACCOUNT_ID, settings.initialBalance);
+    const [settings, accountId] = await Promise.all([getAccountSettings(), getActiveAccountId()]);
+    const trades = csvRowsToTrades(rows, accountId, settings.initialBalance);
 
     const csvIds = trades.map((t) => t.id);
     const replacedCount = await prisma.trade.count({
-      where: { accountId: CSV_ACCOUNT_ID, id: { in: csvIds } },
+      where: tradesWhere(accountId, { id: { in: csvIds } }),
     });
 
     await upsertImportedTrades(trades);
 
-    const totalTrades = await prisma.trade.count({ where: { accountId: CSV_ACCOUNT_ID } });
+    const totalTrades = await prisma.trade.count({ where: tradesWhere(accountId) });
 
     return NextResponse.json({
       imported: trades.length,

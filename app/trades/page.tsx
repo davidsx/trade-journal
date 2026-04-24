@@ -1,3 +1,6 @@
+import type { Prisma } from "@/app/generated/prisma/client";
+import { getActiveAccountId } from "@/lib/activeAccount";
+import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 import TradeTable from "@/components/TradeTable";
 import RescoreButton from "@/components/RescoreButton";
@@ -22,14 +25,16 @@ export default async function TradesPage({
     : "entryTime";
   const sortDir: "asc" | "desc" = params.dir === "asc" ? "asc" : "desc";
 
-  const where: Record<string, unknown> = {};
-  if (contract) where.contractName = contract;
+  const filter: Prisma.TradeWhereInput = {};
+  if (contract) filter.contractName = contract;
   if (from || to) {
-    where.entryTime = {
+    filter.entryTime = {
       ...(from ? { gte: new Date(from) } : {}),
       ...(to ? { lte: new Date(to) } : {}),
     };
   }
+  const accountId = await getActiveAccountId();
+  const where = tradesWhere(accountId, filter);
 
   const [trades, total] = await Promise.all([
     prisma.trade.findMany({
@@ -42,6 +47,7 @@ export default async function TradesPage({
   ]);
 
   const contracts = await prisma.trade.findMany({
+    where: tradesWhere(accountId),
     distinct: ["contractName"],
     select: { contractName: true },
   });

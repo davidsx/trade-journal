@@ -1,10 +1,13 @@
+import { getActiveAccountId } from "@/lib/activeAccount";
+import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 import type { TradeMarker, TradeLine } from "@/components/CandleChart";
 import ChartClient from "@/components/ChartClient";
 import RefreshCandlesButton from "@/components/RefreshCandlesButton";
 
 export default async function ChartPage() {
-  const trades = await prisma.trade.findMany({ orderBy: { entryTime: "asc" } });
+  const accountId = await getActiveAccountId();
+  const trades = await prisma.trade.findMany({ where: tradesWhere(accountId), orderBy: { entryTime: "asc" } });
 
   // Raw per-trade lines (entry → exit), used for yellow connector lines
   const tradeLines: TradeLine[] = trades.map((t) => ({

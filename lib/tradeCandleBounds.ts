@@ -1,3 +1,5 @@
+import { getActiveAccountId } from "@/lib/activeAccount";
+import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 import { defaultCandlePeriodUnix } from "@/lib/candleRange";
 
@@ -7,18 +9,23 @@ const BUFFER_AFTER_SEC = 24 * 60 * 60;
 /**
  * Unix range [period1, period2] covering all trades (with buffers), capped at now.
  * Falls back to a short rolling window when there are no trades.
+ * @param accountId - defaults to the active (cookie) account
  */
-export async function getCandleFetchRangeFromTrades(): Promise<{
+export async function getCandleFetchRangeFromTrades(
+  accountIdParam?: number
+): Promise<{
   period1: string;
   period2: string;
   tradeCount: number;
 }> {
+  const accountId = accountIdParam ?? (await getActiveAccountId());
   const [agg, count] = await Promise.all([
     prisma.trade.aggregate({
+      where: tradesWhere(accountId),
       _min: { entryTime: true },
       _max: { exitTime: true },
     }),
-    prisma.trade.count(),
+    prisma.trade.count({ where: tradesWhere(accountId) }),
   ]);
 
   if (

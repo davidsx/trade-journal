@@ -1,3 +1,5 @@
+import { getActiveAccountId } from "@/lib/activeAccount";
+import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 import {
   analyzeTimeOfDay,
@@ -14,7 +16,8 @@ function fmtUsd(v: number) {
 }
 
 export default async function PatternsPage() {
-  const trades = await prisma.trade.findMany({ orderBy: { entryTime: "asc" } });
+  const accountId = await getActiveAccountId();
+  const trades = await prisma.trade.findMany({ where: tradesWhere(accountId), orderBy: { entryTime: "asc" } });
   const timeOfDay = analyzeTimeOfDay(trades);
   const dayOfWeek = analyzeDayOfWeek(trades);
   const instruments = analyzeInstruments(trades);

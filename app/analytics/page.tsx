@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { computeSummaryMetrics } from "@/lib/analytics/metrics";
 import {
   scoreMetricsByHktHour,
+  scoreMetricsByHoldingMins,
   scoreMetricsByTradingDayWeekday,
   scoreMetricsBySession,
 } from "@/lib/analytics/scoreTimeMetrics";
@@ -53,6 +54,7 @@ export default async function AnalyticsPage() {
   const sessionScoreRows = scoreMetricsBySession(trades);
   const hourlyScoreRows = scoreMetricsByHktHour(trades);
   const weekdayScoreRows = scoreMetricsByTradingDayWeekday(trades);
+  const holdTimeScoreRows = scoreMetricsByHoldingMins(trades);
 
   return (
     <div className="space-y-6">
@@ -101,6 +103,7 @@ export default async function AnalyticsPage() {
         session={sessionScoreRows}
         hourly={hourlyScoreRows}
         weekday={weekdayScoreRows}
+        holdTime={holdTimeScoreRows}
       />
 
       {/* Score vs P&L */}

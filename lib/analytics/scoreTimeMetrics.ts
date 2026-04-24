@@ -118,6 +118,53 @@ export function scoreMetricsByTradingDayWeekday(trades: readonly Trade[]) {
   });
 }
 
+/**
+ * Finer hold spectrum than the quality scorer’s four hold bands (see `getHoldTimeScore` in `scorer.ts`).
+ * Boundaries are in minutes; each trade maps to exactly one bucket.
+ */
+const HOLD_TIME_BUCKETS: { label: string; sublabel: string }[] = [
+  { label: "<1 min", sublabel: "m < 1" },
+  { label: "1–5 min", sublabel: "1 ≤ m < 5" },
+  { label: "5–15 min", sublabel: "5 ≤ m < 15" },
+  { label: "15–30 min", sublabel: "15 ≤ m < 30" },
+  { label: "30–60 min", sublabel: "30 ≤ m < 60" },
+  { label: "1–2 h", sublabel: "60 ≤ m < 120" },
+  { label: "2–4 h", sublabel: "120 ≤ m < 240" },
+  { label: "4–8 h", sublabel: "240 ≤ m < 480" },
+  { label: "≥8 h", sublabel: "m ≥ 480" },
+];
+
+function holdBucketIndex(mins: number): number {
+  const m = mins;
+  if (m < 1) return 0;
+  if (m < 5) return 1;
+  if (m < 15) return 2;
+  if (m < 30) return 3;
+  if (m < 60) return 4;
+  if (m < 120) return 5;
+  if (m < 240) return 6;
+  if (m < 480) return 7;
+  return 8;
+}
+
+/**
+ * Avg quality and P&L by **time in position** (entry → exit), in fixed hold-duration bands.
+ */
+export function scoreMetricsByHoldingMins(trades: readonly Trade[]) {
+  const aggs = HOLD_TIME_BUCKETS.map(() => aggBucket());
+  for (const t of trades) {
+    const i = holdBucketIndex(t.holdingMins);
+    const b = aggs[i]!;
+    b.tradeCount++;
+    b.pnlSum += t.netPnl;
+    if (t.qualityScore != null) {
+      b.scoredCount++;
+      b.qualitySum += t.qualityScore;
+    }
+  }
+  return HOLD_TIME_BUCKETS.map((meta, i) => finishRow(aggs[i]!, meta));
+}
+
 export type ScoreTimeRow = ReturnType<typeof finishRow>;
 
 function resolveRow(rows: readonly ScoreTimeRow[], winner: ScoreTimeRow): ScoreTimeRow {

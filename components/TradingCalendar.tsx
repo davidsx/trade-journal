@@ -1,7 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { tradingDayKeyHkt } from "@/lib/tradingDay";
+import type { CalendarDayTrade } from "@/lib/calendarDayTrade";
+import TradingDayModal from "@/components/TradingDayModal";
+
+export type { CalendarDayTrade } from "@/lib/calendarDayTrade";
 
 export type CalendarTradeRow = {
   exitTime: string;
@@ -14,7 +18,7 @@ export type DayStat = {
   winCount: number;
 };
 
-function buildDailyStats(trades: CalendarTradeRow[]): Record<string, DayStat> {
+function buildDailyStats(trades: CalendarDayTrade[]): Record<string, DayStat> {
   const map = new Map<string, DayStat>();
   for (const t of trades) {
     const k = tradingDayKeyHkt(new Date(t.exitTime));
@@ -72,13 +76,18 @@ const DAY_MIN_H = "min-h-[84px]";
 const GRID_COLS = "grid-cols-[repeat(7,minmax(0,1fr))_minmax(5.5rem,8rem)]";
 
 type Props = {
-  trades: CalendarTradeRow[];
+  trades: CalendarDayTrade[];
 };
 
 export default function TradingCalendar({ trades }: Props) {
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
+  const [dayModalKey, setDayModalKey] = useState<string | null>(null);
+
+  const openDay = useCallback((key: string) => {
+    setDayModalKey(key);
+  }, []);
 
   const dailyStats = useMemo(() => buildDailyStats(trades), [trades]);
   const cells = useMemo(() => monthGridCells(viewYear, viewMonth), [viewYear, viewMonth]);
@@ -111,6 +120,14 @@ export default function TradingCalendar({ trades }: Props) {
 
   return (
     <div>
+      {dayModalKey && (
+        <TradingDayModal
+          open
+          onClose={() => setDayModalKey(null)}
+          dayKey={dayModalKey}
+          allTrades={trades}
+        />
+      )}
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
           Trading calendar
@@ -202,15 +219,24 @@ export default function TradingCalendar({ trades }: Props) {
                 return (
                   <div
                     key={cell.key}
-                    className={`${DAY_MIN_H} rounded-md flex flex-col items-center justify-start p-1.5 gap-0.5`}
+                    role="button"
+                    tabIndex={0}
+                    className={`${DAY_MIN_H} rounded-md flex flex-col items-center justify-start p-1.5 gap-0.5 transition-opacity cursor-pointer hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40`}
                     style={{
                       background: bg,
                       border,
                     }}
+                    onClick={() => openDay(cell.key)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openDay(cell.key);
+                      }
+                    }}
                     title={
                       has
-                        ? `${cell.key}: ${stat!.tradeCount} trades, ${wr} win rate, ${fmtPnl(pnl)}`
-                        : undefined
+                        ? `${cell.key}: ${stat!.tradeCount} trades, ${wr} win rate, ${fmtPnl(pnl)} · Click for detail`
+                        : `Open ${cell.key} (trading day) · no trades yet`
                     }
                   >
                     <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>

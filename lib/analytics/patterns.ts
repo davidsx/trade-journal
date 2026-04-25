@@ -232,6 +232,21 @@ export function getEntrySessionName(entryTime: Date): SessionName {
   return getSession(entryTime.getUTCHours(), entryTime.getUTCMinutes());
 }
 
+/**
+ * Session stats by **entry** time (HKT/UTC), same as `analyzeSessionPerformance` but
+ * without requiring a full Prisma `Trade` — for client modals and lightweight calls.
+ */
+export function analyzeSessionPerformanceLite(
+  trades: ReadonlyArray<{
+    entryTime: Date;
+    netPnl: number;
+    direction: string;
+    holdingMins: number;
+  }>
+): SessionPattern[] {
+  return analyzeSessionPerformance(trades as unknown as Trade[]);
+}
+
 export function analyzeSessionPerformance(trades: Trade[]): SessionPattern[] {
   const DEFS: { session: SessionName; hktRange: string }[] = [
     { session: "Asia",      hktRange: "8:00am – 4:00pm" },

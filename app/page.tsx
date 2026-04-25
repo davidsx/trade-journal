@@ -130,8 +130,16 @@ export default async function DashboardPage() {
       >
         <TradingCalendar
           trades={trades.map((t) => ({
+            id: t.id,
+            contractName: t.contractName,
+            direction: t.direction,
+            entryTime: t.entryTime.toISOString(),
             exitTime: t.exitTime.toISOString(),
+            entryPrice: t.entryPrice,
+            exitPrice: t.exitPrice,
             netPnl: t.netPnl,
+            holdingMins: t.holdingMins,
+            qualityScore: t.qualityScore,
           }))}
         />
       </div>

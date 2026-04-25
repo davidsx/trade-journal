@@ -16,7 +16,7 @@ export async function POST(request: Request) {
 
     await warmCandleCacheForScoring(new URL(request.url).origin);
 
-    const scored = scoreTrades(trades);
+    const scored = await scoreTrades(trades);
     await Promise.all(
       scored.map((t) =>
         prisma.trade.update({

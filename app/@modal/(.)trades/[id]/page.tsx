@@ -16,7 +16,7 @@ export default async function TradeModalPage({
   const trade = await prisma.trade.findFirst({ where: tradesWhere(accountId, { id }) });
   if (!trade) notFound();
 
-  const dayCandles = loadDayCandles(new Date(trade.entryTime));
+  const dayCandles = await loadDayCandles(new Date(trade.entryTime));
 
   return (
     <TradeModal>

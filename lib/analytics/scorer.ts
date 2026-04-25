@@ -1,6 +1,5 @@
-import { readFileSync, existsSync } from "fs";
-import { join } from "path";
 import type { TradeModel as Trade } from "@/app/generated/prisma/models";
+import { loadCandlesForScoringAsync } from "@/lib/candles/candlesServer";
 
 // ── Candle helpers ────────────────────────────────────────────────────────────
 
@@ -16,17 +15,6 @@ interface Imbalance {
   low: number;
   high: number;
   formationIdx: number; // index of 3rd candle that completed the FVG
-}
-
-function loadCachedCandles(): Candle[] {
-  try {
-    const path = join(process.cwd(), "data", "candles-cache.json");
-    if (!existsSync(path)) return [];
-    const cache = JSON.parse(readFileSync(path, "utf-8"));
-    return (cache.candles ?? []) as Candle[];
-  } catch {
-    return [];
-  }
 }
 
 // A Fair Value Gap (imbalance) exists when candle[i-2].high < candle[i].low (bullish)
@@ -337,9 +325,9 @@ function getPointValue(contractName: string): number {
   return POINT_VALUES[base] ?? 1;
 }
 
-export function scoreTrades(trades: Trade[]): Trade[] {
+export async function scoreTrades(trades: Trade[]): Promise<Trade[]> {
   if (trades.length === 0) return [];
-  const candles = loadCachedCandles();
+  const candles = (await loadCandlesForScoringAsync(trades)) as Candle[];
 
   return trades.map((trade, i) => {
     const notes: string[] = [];

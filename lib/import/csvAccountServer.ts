@@ -104,7 +104,7 @@ export async function finalizeCsvAccountScoring(
     };
   });
 
-  const scored = scoreTrades(withCapital);
+  const scored = await scoreTrades(withCapital);
 
   await runPool(scored, conc, async (t) => {
     await prisma.trade.update({

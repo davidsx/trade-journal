@@ -120,7 +120,18 @@ export default function Sidebar({ activeAccount, accounts }: SidebarProps) {
       </div>
 
       {!collapsed && (
-        <div className="mt-1 shrink-0 px-2">
+        <div className="mt-1 shrink-0 px-2 space-y-2">
+          <a
+            href={`/api/account-report?accountId=${activeAccount.id}`}
+            className="flex h-9 w-full min-h-9 shrink-0 items-center justify-center rounded-md border px-3 text-center text-xs font-medium leading-none transition-colors"
+            style={{
+              background: "var(--bg-border)",
+              color: "var(--text-secondary)",
+              borderColor: "var(--bg-border)",
+            }}
+          >
+            Export PDF report
+          </a>
           <CsvUpload />
         </div>
       )}

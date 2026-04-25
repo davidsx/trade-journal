@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import CandleChart from "./CandleChart";
 import type { Candle } from "@/app/api/candles/route";
 import type { TradeMarker, TradeLine } from "./CandleChart";
+import { CANDLES_REFRESH_EVENT } from "@/lib/candles/refreshEvent";
 
 const INTERVALS = [
   { label: "1m",  value: "1m" },
@@ -26,13 +27,33 @@ export default function ChartClient({ markers, tradeLines, tradeCount }: Props) 
   const [candles, setCandles] = useState<Candle[]>([]);
   const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
   const [error, setError] = useState("");
+  const [cacheBust, setCacheBust] = useState(0);
 
+  useEffect(() => {
+    const onRefreshed = () => setCacheBust((n) => n + 1);
+    window.addEventListener(CANDLES_REFRESH_EVENT, onRefreshed);
+    return () => window.removeEventListener(CANDLES_REFRESH_EVENT, onRefreshed);
+  }, []);
+
+  // Auto-fetch on mount, interval change, or after "↻ Refresh candles" updates the on-disk file.
   useEffect(() => {
     setStatus("loading");
     setCandles([]);
-    fetch(`/api/candles?symbol=MNQ%3DF&interval=${interval}`)
-      .then((r) => r.json())
-      .then((d) => {
+
+    const ac = new AbortController();
+    const run = async () => {
+      try {
+        const r = await fetch(`/api/candles?symbol=MNQ%3DF&interval=${interval}`, {
+          signal: ac.signal,
+          cache: "no-store",
+        });
+        const d = (await r.json()) as { error?: string; candles?: Candle[] };
+        if (ac.signal.aborted) return;
+        if (!r.ok) {
+          setError((d as { error?: string }).error ?? r.statusText);
+          setStatus("error");
+          return;
+        }
         if (d.error) {
           setError(d.error);
           setStatus("error");
@@ -40,12 +61,16 @@ export default function ChartClient({ markers, tradeLines, tradeCount }: Props) 
           setCandles(d.candles ?? []);
           setStatus("ok");
         }
-      })
-      .catch((e) => {
-        setError(String(e));
+      } catch (e) {
+        if (ac.signal.aborted) return;
+        if (e instanceof Error && e.name === "AbortError") return;
+        setError(e instanceof Error ? e.message : String(e));
         setStatus("error");
-      });
-  }, [interval]);
+      }
+    };
+    void run();
+    return () => ac.abort();
+  }, [interval, cacheBust]);
 
   return (
     <>
@@ -92,6 +117,29 @@ export default function ChartClient({ markers, tradeLines, tradeCount }: Props) 
           >
             Check API route directly →
           </a>
+        </div>
+      ) : status === "loading" ? (
+        <div
+          className="flex flex-col items-center justify-center gap-3 rounded-lg text-sm"
+          style={{ height: 560, background: "#0f0f0f", color: "var(--text-muted)" }}
+        >
+          <span
+            className="h-6 w-6 rounded-full border-2 border-current border-t-transparent opacity-80 animate-spin"
+            style={{ color: "var(--accent)" }}
+            aria-hidden
+          />
+          <p style={{ color: "var(--text-secondary)" }}>Loading candles from Yahoo (via API)…</p>
+          <p className="text-xs text-center max-w-sm px-4">
+            If this is your first visit, the server may be filling the range from your trades (can take a minute).
+          </p>
+        </div>
+      ) : candles.length === 0 ? (
+        <div
+          className="flex flex-col items-center justify-center rounded-lg text-sm gap-1"
+          style={{ height: 560, background: "#0f0f0f", color: "var(--text-muted)" }}
+        >
+          <span style={{ color: "var(--text-secondary)" }}>No bars returned for this range</span>
+          <span className="text-xs">Import trades or use Refresh in the header to re-fetch from Yahoo.</span>
         </div>
       ) : (
         <CandleChart candles={candles} markers={markers} tradeLines={tradeLines} height={560} />

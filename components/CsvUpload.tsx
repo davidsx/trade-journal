@@ -149,7 +149,7 @@ export default function CsvUpload() {
         disabled={isLoading}
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
-        className="w-full py-2 px-3 rounded-md text-sm font-medium transition-colors text-center"
+        className="flex h-9 w-full min-h-9 shrink-0 items-center justify-center rounded-md border border-transparent px-3 text-center text-xs font-medium leading-none transition-colors"
         style={{
           background: isLoading ? "var(--accent-dim)" : "var(--accent)",
           color: "#000",

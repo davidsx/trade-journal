@@ -1,4 +1,9 @@
-import type { SessionPattern } from "@/lib/analytics/patterns";
+"use client";
+
+import { useEffect, useState } from "react";
+import { getEntrySessionName, type SessionPattern } from "@/lib/analytics/patterns";
+import LivePill from "@/components/LivePill";
+import RefreshLiveTimeButton from "@/components/RefreshLiveTimeButton";
 
 type Props = {
   sessions: SessionPattern[];
@@ -12,14 +17,28 @@ export default function SessionPerformanceGrid({
   title = "Session performance (HKT)",
   gridClassName = "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3",
 }: Props) {
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const liveSession = now ? getEntrySessionName(now) : null;
+
   return (
     <div
       className="rounded-lg p-5"
       style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
     >
-      <h2 className="text-sm font-medium mb-4" style={{ color: "var(--text-secondary)" }}>
-        {title}
-      </h2>
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <h2 className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+          {title}
+        </h2>
+        <RefreshLiveTimeButton onClick={() => setNow(new Date())} />
+      </div>
+      <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
+        Asia 08:00–16:00 · London 16:00–21:30 · NY 21:30–05:00 · Off 05:00–08:00 HKT.
+      </p>
       <div className={gridClassName}>
         {sessions.map((s) => {
           const sessionColor =
@@ -31,24 +50,32 @@ export default function SessionPerformanceGrid({
                   ? { bg: "#22c55e18", border: "#22c55e40", accent: "#4ade80" }
                   : { bg: "#6b728018", border: "#6b728040", accent: "#9ca3af" };
           const noData = s.tradeCount === 0;
+          const isLive = liveSession !== null && liveSession === s.session;
           return (
             <div
               key={s.session}
               className="rounded-lg p-4"
-              style={{ background: sessionColor.bg, border: `1px solid ${sessionColor.border}` }}
+              style={{
+                background: sessionColor.bg,
+                border: `1px solid ${sessionColor.border}`,
+              }}
+              title={isLive ? "This session is live now (wall clock)" : undefined}
             >
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between gap-2 mb-3">
                 <span className="text-sm font-semibold" style={{ color: sessionColor.accent }}>
                   {s.session}
                 </span>
-                {!noData && (
-                  <span
-                    className="text-xs px-2 py-0.5 rounded-full tabular-nums"
-                    style={{ background: "var(--bg-card)", color: "var(--text-muted)" }}
-                  >
-                    {s.tradeCount} trades
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {isLive && <LivePill />}
+                  {!noData && (
+                    <span
+                      className="text-xs px-2 py-0.5 rounded-full tabular-nums"
+                      style={{ background: "var(--bg-card)", color: "var(--text-muted)" }}
+                    >
+                      {s.tradeCount} trades
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="text-xs mb-3" style={{ color: "var(--text-muted)" }}>
                 {s.hktRange} HKT

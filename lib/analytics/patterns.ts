@@ -1,10 +1,17 @@
 import type { TradeModel as Trade } from "@/app/generated/prisma/models";
-import { tradingDayWeekdayIndexHkt } from "@/lib/tradingDay";
+import { GLOBEX_SESSION_START_HOUR_HKT, tradingDayWeekdayIndexHkt } from "@/lib/tradingDay";
+
+const HKT_OFFSET_MS = 8 * 60 * 60 * 1000;
+
+/** One CME Globex “trading day” in 15-minute steps: 06:00 HKT → … → 05:45 HKT (96 slots). */
+export const TRADING_DAY_QUARTER_HOUR_SLOT_COUNT = 96;
 
 export interface TimeOfDayBucket {
-  hourLabel: string; // e.g. "09:30"
+  hourLabel: string; // e.g. "09:15"
   hour: number;
   minute: number;
+  /** Index 0 = 06:00 HKT (session open), 95 = 05:45 HKT — CME trading-day order. */
+  slotIndex: number;
   winRate: number;
   avgPnl: number;
   tradeCount: number;
@@ -42,36 +49,59 @@ export interface EdgeDecayPoint {
   decayAlert: boolean;
 }
 
-export function analyzeTimeOfDay(trades: Trade[]): TimeOfDayBucket[] {
-  // 30-min buckets across 24 hours
-  const buckets = new Map<string, { wins: number; total: number; pnlSum: number }>();
+function hktWallClock(instant: Date): { h: number; m: number } {
+  const t = new Date(instant.getTime() + HKT_OFFSET_MS);
+  return { h: t.getUTCHours(), m: t.getUTCMinutes() };
+}
 
-  const HKT_OFFSET_MS = 8 * 60 * 60 * 1000;
+/** Map wall clock to the 15-minute bucket start (00, 15, 30, or 45). */
+function toQuarterHourBucketKey(h: number, m: number): string {
+  const q = m < 15 ? 0 : m < 30 ? 15 : m < 45 ? 30 : 45;
+  return `${String(h).padStart(2, "0")}:${String(q).padStart(2, "0")}`;
+}
+
+/** 96 keys: 06:00, 06:15, …, 23:45, 00:00, …, 05:45 (CME Globex day, HKT). */
+export function tradingDayQuarterHourKeysHkt(): string[] {
+  const keys: string[] = [];
+  for (let i = 0; i < TRADING_DAY_QUARTER_HOUR_SLOT_COUNT; i++) {
+    const totalMins = (GLOBEX_SESSION_START_HOUR_HKT * 60 + i * 15) % (24 * 60);
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    keys.push(toQuarterHourBucketKey(h, m));
+  }
+  return keys;
+}
+
+export function analyzeTimeOfDay(trades: Trade[]): TimeOfDayBucket[] {
+  const orderedKeys = tradingDayQuarterHourKeysHkt();
+  const buckets = new Map<string, { wins: number; total: number; pnlSum: number }>();
+  for (const k of orderedKeys) {
+    buckets.set(k, { wins: 0, total: 0, pnlSum: 0 });
+  }
+
   for (const t of trades) {
-    const hkt = new Date(t.entryTime.getTime() + HKT_OFFSET_MS);
-    const h = hkt.getUTCHours();
-    const m = hkt.getUTCMinutes() < 30 ? 0 : 30;
-    const key = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-    const bucket = buckets.get(key) ?? { wins: 0, total: 0, pnlSum: 0 };
+    const { h, m } = hktWallClock(t.entryTime);
+    const key = toQuarterHourBucketKey(h, m);
+    const bucket = buckets.get(key);
+    if (!bucket) continue;
     bucket.total++;
     if (t.netPnl > 0) bucket.wins++;
     bucket.pnlSum += t.netPnl;
-    buckets.set(key, bucket);
   }
 
-  return [...buckets.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, b]) => {
-      const [h, m] = key.split(":").map(Number);
-      return {
-        hourLabel: key,
-        hour: h,
-        minute: m,
-        winRate: b.total > 0 ? b.wins / b.total : 0,
-        avgPnl: b.total > 0 ? b.pnlSum / b.total : 0,
-        tradeCount: b.total,
-      };
-    });
+  return orderedKeys.map((key, slotIndex) => {
+    const b = buckets.get(key)!;
+    const [h, m] = key.split(":").map(Number);
+    return {
+      hourLabel: key,
+      hour: h,
+      minute: m,
+      slotIndex,
+      winRate: b.total > 0 ? b.wins / b.total : 0,
+      avgPnl: b.total > 0 ? b.pnlSum / b.total : 0,
+      tradeCount: b.total,
+    };
+  });
 }
 
 export function analyzeDayOfWeek(trades: Trade[]): DayOfWeekBucket[] {
@@ -230,6 +260,16 @@ function getSession(utcHour: number, utcMinute: number): SessionName {
 /** Map entry instant (stored in UTC) to chart session: Asia / London / NY / Off-hours. */
 export function getEntrySessionName(entryTime: Date): SessionName {
   return getSession(entryTime.getUTCHours(), entryTime.getUTCMinutes());
+}
+
+/**
+ * Session for an HKT wall-clock time (same rules as {@link getEntrySessionName}).
+ * HKT = UTC+8 → UTC hour = (hktHour − 8) mod 24.
+ */
+export function sessionFromHktWallClock(hktHour: number, hktMinute: number): SessionName {
+  let utcH = hktHour - 8;
+  if (utcH < 0) utcH += 24;
+  return getSession(utcH, hktMinute);
 }
 
 /**

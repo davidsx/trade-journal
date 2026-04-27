@@ -2,7 +2,7 @@ import RescoreButton from "@/components/RescoreButton";
 
 export default function ScoreGuidePage() {
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 w-full max-w-none min-w-0">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-semibold">Trade Quality Score</h1>

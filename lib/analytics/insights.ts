@@ -5,8 +5,8 @@ import type { TradeModel as Trade } from "@/app/generated/prisma/models";
 //   [0] session timing  [1] position sizing  [2] imbalance  [3] breakout
 //   [4] exit relative   [5] hold time       [6] streak context
 
-export type SessionCategory = "prime" | "regular" | "low-activity";
-export type SizingCategory = "conservative" | "moderate" | "oversized";
+export type SessionCategory = "prime" | "regular" | "afternoon" | "deep-overnight";
+export type SizingCategory = "conservative" | "moderate" | "oversized" | "unknown";
 export type ImbalanceCategory =
   | "tier1"   // entry inside FVG, within 5 candles
   | "tier2"   // entry inside FVG, within 15 candles
@@ -35,17 +35,20 @@ export function parseScoreNotes(notesJson: string | null): ParsedConditions | nu
   }
   if (!Array.isArray(notes) || notes.length < 7) return null;
 
-  // [0] session timing
+  // [0] session timing — 4 buckets, all distinguishable by unique markers
   let session: SessionCategory = "regular";
-  if (notes[0].includes("prime") || notes[0].includes("session open")) {
+  if (notes[0].includes("after 1:30am") || notes[0].includes("low activity")) {
+    session = "deep-overnight";
+  } else if (notes[0].includes("New York Afternoon") || notes[0].includes("11:30pm")) {
+    session = "afternoon";
+  } else if (notes[0].includes("prime") || notes[0].includes("session open")) {
     session = "prime";
-  } else if (notes[0].includes("low activity") || notes[0].includes("11:30pm")) {
-    session = "low-activity";
   }
 
   // [1] position sizing
   let sizing: SizingCategory = "moderate";
-  if (notes[1].includes("conservative")) sizing = "conservative";
+  if (notes[1].includes("capital unknown")) sizing = "unknown";
+  else if (notes[1].includes("conservative")) sizing = "conservative";
   else if (notes[1].includes("oversized")) sizing = "oversized";
 
   // [2] imbalance — check most specific first
@@ -77,10 +80,22 @@ export function parseScoreNotes(notesJson: string | null): ParsedConditions | nu
 
 // ── Condition group aggregation ───────────────────────────────────────────────
 
+export type ConditionCategory =
+  | "session"
+  | "sizing"
+  | "imbalance"
+  | "breakout"
+  | "streak";
+
 export interface ConditionGroup {
-  label: string;
-  component: "entry" | "exit" | "risk";
   key: string;
+  label: string;
+  category: ConditionCategory;
+  component: "entry" | "exit" | "risk";
+  /** Representative score points awarded when this condition is present (max of the bucket if a range). */
+  points: number;
+  /** Display label for points awarded by the score guide, e.g. "15 pts" or "25–30 pts". */
+  pointsLabel: string;
   tradeCount: number;
   avgScore: number;
   avgPnl: number;
@@ -91,34 +106,115 @@ export interface ConditionGroup {
 interface ConditionDef {
   key: string;
   label: string;
+  category: ConditionCategory;
   component: "entry" | "exit" | "risk";
+  points: number;
+  pointsLabel: string;
   matches: (c: ParsedConditions) => boolean;
 }
 
 const CONDITION_DEFS: ConditionDef[] = [
-  // Session timing
-  { key: "session:prime",        label: "Session: Prime (London/NY open)",  component: "entry", matches: (c) => c.session === "prime" },
-  { key: "session:regular",      label: "Session: Regular hours",           component: "entry", matches: (c) => c.session === "regular" },
-  { key: "session:low-activity", label: "Session: Low-activity (late night)", component: "entry", matches: (c) => c.session === "low-activity" },
-  // Position sizing
-  { key: "sizing:conservative",  label: "Sizing: Conservative (≤5% exposure)",  component: "entry", matches: (c) => c.sizing === "conservative" },
-  { key: "sizing:moderate",      label: "Sizing: Moderate (5–15% exposure)",     component: "entry", matches: (c) => c.sizing === "moderate" },
-  { key: "sizing:oversized",     label: "Sizing: Oversized (>15% exposure)",     component: "entry", matches: (c) => c.sizing === "oversized" },
-  // Imbalance
-  { key: "imb:tier1",   label: "FVG: Entry inside (within 5 candles)",   component: "entry", matches: (c) => c.imbalance === "tier1" },
-  { key: "imb:tier2",   label: "FVG: Entry inside (within 15 candles)",  component: "entry", matches: (c) => c.imbalance === "tier2" },
-  { key: "imb:tier3-4", label: "FVG: Previous candle touched zone",      component: "entry", matches: (c) => c.imbalance === "tier3-4" },
-  { key: "imb:tier5-6", label: "FVG: Entry inside rebalancing candle",   component: "entry", matches: (c) => c.imbalance === "tier5-6" },
-  { key: "imb:tier7-8", label: "FVG: Late entry (2–5 bars after touch)", component: "entry", matches: (c) => c.imbalance === "tier7-8" },
-  { key: "imb:none",    label: "FVG: No imbalance nearby",               component: "entry", matches: (c) => c.imbalance === "none" },
-  // Breakout
-  { key: "breakout:yes", label: "Breakout: Through pivot level",    component: "entry", matches: (c) => c.breakout === "yes" },
-  { key: "breakout:no",  label: "Breakout: No pivot breakout",      component: "entry", matches: (c) => c.breakout === "no" },
-  // Streak context
-  { key: "streak:discipline", label: "Streak: Win after 3+ losses (discipline)", component: "risk", matches: (c) => c.streak === "discipline" },
-  { key: "streak:normal",     label: "Streak: Normal context",                   component: "risk", matches: (c) => c.streak === "normal" },
-  { key: "streak:revenge",    label: "Streak: Large loss after wins (revenge)",  component: "risk", matches: (c) => c.streak === "revenge" },
+  // ── Session timing (max 15 pts) ────────────────────────────────────────────
+  { key: "session:prime", category: "session", component: "entry", points: 15, pointsLabel: "15 pts",
+    label: "Prime — London/NY first hour",
+    matches: (c) => c.session === "prime" },
+  { key: "session:regular", category: "session", component: "entry", points: 10, pointsLabel: "10 pts",
+    label: "Regular session hours",
+    matches: (c) => c.session === "regular" },
+  { key: "session:afternoon", category: "session", component: "entry", points: 5, pointsLabel: "5 pts",
+    label: "NY Afternoon — 11:30pm–1:30am HKT",
+    matches: (c) => c.session === "afternoon" },
+  { key: "session:deep-overnight", category: "session", component: "entry", points: 0, pointsLabel: "0 pts",
+    label: "Deep overnight — after 1:30am HKT",
+    matches: (c) => c.session === "deep-overnight" },
+
+  // ── Position sizing (max 10 pts) ───────────────────────────────────────────
+  { key: "sizing:conservative", category: "sizing", component: "entry", points: 10, pointsLabel: "10 pts",
+    label: "Conservative — 1% move ≤ 5% of capital",
+    matches: (c) => c.sizing === "conservative" },
+  { key: "sizing:moderate", category: "sizing", component: "entry", points: 7, pointsLabel: "4–7 pts",
+    label: "Moderate — 1% move = 5–15% of capital",
+    matches: (c) => c.sizing === "moderate" },
+  { key: "sizing:oversized", category: "sizing", component: "entry", points: 0, pointsLabel: "0 pts",
+    label: "Oversized — 1% move > 15% of capital",
+    matches: (c) => c.sizing === "oversized" },
+
+  // ── Imbalance / FVG (max 40 pts) ───────────────────────────────────────────
+  { key: "imb:tier1", category: "imbalance", component: "entry", points: 40, pointsLabel: "40 pts",
+    label: "Entry inside FVG (formed within 5 candles)",
+    matches: (c) => c.imbalance === "tier1" },
+  { key: "imb:tier2", category: "imbalance", component: "entry", points: 35, pointsLabel: "35 pts",
+    label: "Entry inside FVG (formed within 15 candles)",
+    matches: (c) => c.imbalance === "tier2" },
+  { key: "imb:tier3-4", category: "imbalance", component: "entry", points: 30, pointsLabel: "25–30 pts",
+    label: "Previous candle touched FVG zone",
+    matches: (c) => c.imbalance === "tier3-4" },
+  { key: "imb:tier5-6", category: "imbalance", component: "entry", points: 20, pointsLabel: "15–20 pts",
+    label: "Entry inside a candle that rebalanced FVG",
+    matches: (c) => c.imbalance === "tier5-6" },
+  { key: "imb:tier7-8", category: "imbalance", component: "entry", points: 10, pointsLabel: "5–10 pts",
+    label: "Late entry — earlier candle touched FVG",
+    matches: (c) => c.imbalance === "tier7-8" },
+  { key: "imb:none", category: "imbalance", component: "entry", points: 0, pointsLabel: "0 pts",
+    label: "No imbalance nearby",
+    matches: (c) => c.imbalance === "none" },
+
+  // ── Breakout handling (max 5 pts) ──────────────────────────────────────────
+  { key: "breakout:yes", category: "breakout", component: "entry", points: 5, pointsLabel: "5 pts",
+    label: "Breakout through a pivot level",
+    matches: (c) => c.breakout === "yes" },
+  { key: "breakout:no", category: "breakout", component: "entry", points: 0, pointsLabel: "0 pts",
+    label: "No pivot breakout on entry",
+    matches: (c) => c.breakout === "no" },
+
+  // ── Streak context (max 5 pts) ─────────────────────────────────────────────
+  { key: "streak:discipline", category: "streak", component: "risk", points: 5, pointsLabel: "5 pts",
+    label: "Discipline — win after 3+ losses",
+    matches: (c) => c.streak === "discipline" },
+  { key: "streak:normal", category: "streak", component: "risk", points: 3, pointsLabel: "3 pts",
+    label: "Normal streak context",
+    matches: (c) => c.streak === "normal" },
+  { key: "streak:revenge", category: "streak", component: "risk", points: 0, pointsLabel: "0 pts",
+    label: "Revenge signal — large loss after 3+ wins",
+    matches: (c) => c.streak === "revenge" },
 ];
+
+/** Public metadata about each condition category (max points, score-guide alignment). */
+export const CONDITION_CATEGORIES: Record<
+  ConditionCategory,
+  { title: string; component: "entry" | "exit" | "risk"; maxPoints: number; description: string }
+> = {
+  session: {
+    title: "Session timing",
+    component: "entry",
+    maxPoints: 15,
+    description: "When the trade was entered (CME futures hours, HKT).",
+  },
+  sizing: {
+    title: "Position sizing",
+    component: "entry",
+    maxPoints: 10,
+    description: "Dollar exposure on a 1% adverse move, as % of capital.",
+  },
+  imbalance: {
+    title: "Imbalance handling (FVG)",
+    component: "entry",
+    maxPoints: 40,
+    description: "How close the entry price is to a Fair Value Gap.",
+  },
+  breakout: {
+    title: "Breakout handling",
+    component: "entry",
+    maxPoints: 5,
+    description: "Whether the entry candle ran through a pivot level.",
+  },
+  streak: {
+    title: "Streak context",
+    component: "risk",
+    maxPoints: 5,
+    description: "Recent win/loss sequence around this trade.",
+  },
+};
 
 export function analyzeConditionGroups(trades: Trade[]): ConditionGroup[] {
   const scored = trades.filter((t) => t.qualityScore !== null && t.scoreNotes != null);
@@ -139,9 +235,12 @@ export function analyzeConditionGroups(trades: Trade[]): ConditionGroup[] {
 
     if (withCondition.length === 0) {
       return {
-        label: def.label,
-        component: def.component,
         key: def.key,
+        label: def.label,
+        category: def.category,
+        component: def.component,
+        points: def.points,
+        pointsLabel: def.pointsLabel,
         tradeCount: 0,
         avgScore: 0,
         avgPnl: 0,
@@ -163,9 +262,12 @@ export function analyzeConditionGroups(trades: Trade[]): ConditionGroup[] {
     const pnlUplift = avgPnl - withoutAvgPnl;
 
     return {
-      label: def.label,
-      component: def.component,
       key: def.key,
+      label: def.label,
+      category: def.category,
+      component: def.component,
+      points: def.points,
+      pointsLabel: def.pointsLabel,
       tradeCount: withCondition.length,
       avgScore,
       avgPnl,
@@ -182,7 +284,10 @@ export function analyzeConditionGroups(trades: Trade[]): ConditionGroup[] {
 export interface BlueprintCondition {
   key: string;
   label: string;
+  category: ConditionCategory;
   component: "entry" | "exit" | "risk";
+  points: number;
+  pointsLabel: string;
   prevalenceInGood: number; // fraction of good trades with this condition
   prevalenceInAll: number;  // fraction of all trades with this condition
   uplift: number;           // prevalenceInGood − prevalenceInAll
@@ -242,7 +347,10 @@ export function buildSetupBlueprint(trades: Trade[], minScore = 70): SetupBluepr
     return {
       key: def.key,
       label: def.label,
+      category: def.category,
       component: def.component,
+      points: def.points,
+      pointsLabel: def.pointsLabel,
       prevalenceInGood,
       prevalenceInAll,
       uplift: prevalenceInGood - prevalenceInAll,

@@ -270,9 +270,9 @@ function PatternsPage({ data }: { data: AccountReportPayload }) {
     <Page size="A4" style={styles.page}>
       <Text style={styles.h1}>Patterns</Text>
       <Text style={styles.muted}>
-        Time buckets and sessions use HKT. Entry time drives 30m buckets. Day of week is based on the trading day (CME, HKT) from exit time.
+        Time buckets and sessions use HKT. Entry time uses 15-minute buckets. Day of week is based on the trading day (CME, HKT) from exit time.
       </Text>
-      <Text style={styles.h2}>Time of day (30m buckets, entry HKT)</Text>
+      <Text style={styles.h2}>Time of day (15m buckets, entry HKT)</Text>
       <View style={styles.twoCol}>
         <View style={styles.col}>
           <TimeBucketTable rows={timeLeft} />

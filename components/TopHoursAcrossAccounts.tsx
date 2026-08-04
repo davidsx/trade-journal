@@ -39,6 +39,7 @@ function sessionMeta(s: SessionName): { fg: string; bg: string; abbr: string } {
 
 export default function TopHoursAcrossAccounts({ tallies, accountsCounted }: Props) {
   const top3 = tallies.slice(0, 3);
+  const runnersUp = tallies.slice(3, 8); // ranks #4–#8
 
   return (
     <div
@@ -110,6 +111,54 @@ export default function TopHoursAcrossAccounts({ tallies, accountsCounted }: Pro
               </div>
             );
           })}
+        </div>
+      )}
+
+      {runnersUp.length > 0 && (
+        <div className="mt-4 pt-4" style={{ borderTop: "1px solid var(--bg-border)" }}>
+          <div className="text-[11px] uppercase tracking-wide mb-2" style={{ color: "var(--text-muted)" }}>
+            Ranks #4–#{3 + runnersUp.length}
+          </div>
+          <div className="flex flex-col gap-1">
+            {runnersUp.map((t, i) => {
+              const meta = sessionMeta(t.session);
+              return (
+                <div
+                  key={t.hour}
+                  className="flex items-center gap-3 text-xs py-1 px-2 rounded"
+                  style={{ background: "var(--bg-base)" }}
+                >
+                  <span className="w-6 tabular-nums font-medium" style={{ color: "var(--text-muted)" }}>
+                    #{i + 4}
+                  </span>
+                  <span className="font-mono tabular-nums font-medium w-14" style={{ color: "var(--text-primary)" }}>
+                    {t.hourLabel}
+                  </span>
+                  <span
+                    className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                    style={{ background: meta.bg, color: meta.fg }}
+                  >
+                    {meta.abbr}
+                  </span>
+                  <span className="tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                    <span className="font-semibold" style={{ color: "var(--text-primary)" }}>
+                      {t.weightedScore}
+                    </span>{" "}
+                    pts
+                  </span>
+                  <span className="tabular-nums hidden sm:inline" style={{ color: "var(--text-muted)" }}>
+                    {t.appearances} of {accountsCounted}
+                  </span>
+                  <span
+                    className="tabular-nums font-medium ml-auto"
+                    style={{ color: t.totalPnl >= 0 ? "var(--profit)" : "var(--loss)" }}
+                  >
+                    {fmtUsd(t.totalPnl)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

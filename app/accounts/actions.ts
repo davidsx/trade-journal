@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { ACTIVE_ACCOUNT_COOKIE, getActiveAccountId } from "@/lib/activeAccount";
 import { prisma } from "@/lib/db/prisma";
-import { DEFAULT_INITIAL_BALANCE, MAX_INITIAL_BALANCE } from "@/lib/accountConstants";
+import { MAX_INITIAL_BALANCE } from "@/lib/accountConstants";
 import { applyAccountInitialBalance } from "@/lib/applyAccountCapital";
 import { getRequestOriginFromHeaders } from "@/lib/requestOrigin";
 
@@ -27,12 +27,48 @@ export async function switchAccountAction(accountId: number) {
   return { ok: true as const };
 }
 
-export async function createAccountAction(name: string) {
-  const n = name.trim();
+export type CreateAccountInput = {
+  name: string;
+  initialBalance: number;
+  cost: number;
+  propfirmName: string | null;
+  stage: "Eval" | "Funded";
+  numberOfAccounts: number;
+  description: string | null;
+};
+
+export async function createAccountAction(input: CreateAccountInput) {
+  const n = input.name.trim();
   if (!n) return { error: "Name is required" };
   if (n.length > 120) return { error: "Name is too long (max 120 characters)" };
+  if (!Number.isFinite(input.initialBalance) || input.initialBalance <= 0) {
+    return { error: "Starting capital must be a positive number" };
+  }
+  if (input.initialBalance > MAX_INITIAL_BALANCE) {
+    return { error: `Starting capital may not exceed ${MAX_INITIAL_BALANCE.toLocaleString()}` };
+  }
+  if (!Number.isFinite(input.cost) || input.cost < 0) {
+    return { error: "Cost must be a non-negative number" };
+  }
+  const propfirmName = input.propfirmName?.trim() || null;
+  if (propfirmName && propfirmName.length > 120) return { error: "Prop firm name is too long (max 120 characters)" };
+  const description = input.description?.trim() || null;
+  if (description && description.length > 1000) return { error: "Description is too long (max 1000 characters)" };
+  if (!Number.isInteger(input.numberOfAccounts) || input.numberOfAccounts < 1) {
+    return { error: "Number of accounts must be a positive whole number" };
+  }
+  if (input.stage !== "Eval" && input.stage !== "Funded") return { error: "Invalid stage" };
+
   const a = await prisma.account.create({
-    data: { name: n, initialBalance: DEFAULT_INITIAL_BALANCE },
+    data: {
+      name: n,
+      initialBalance: Math.round(input.initialBalance),
+      cost: input.cost,
+      propfirmName,
+      stage: input.stage,
+      numberOfAccounts: input.numberOfAccounts,
+      description,
+    },
   });
   (await cookies()).set(ACTIVE_ACCOUNT_COOKIE, String(a.id), COOKIE_OPTIONS);
   revalidateAll();

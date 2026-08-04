@@ -10,6 +10,7 @@ import {
   updateAccountDetailsAction,
   updateAccountInitialBalanceAction,
 } from "@/app/accounts/actions";
+import { DEFAULT_INITIAL_BALANCE } from "@/lib/accountConstants";
 
 export type AccountStage = "Eval" | "Funded";
 
@@ -41,7 +42,17 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
   useEffect(() => {
     setAccounts(initialAccounts);
   }, [initialAccounts]);
-  const [newName, setNewName] = useState("");
+  const emptyNewAccount = {
+    name: "",
+    initialBalance: String(DEFAULT_INITIAL_BALANCE),
+    cost: "0",
+    propfirmName: "",
+    stage: "Eval" as AccountStage,
+    numberOfAccounts: "1",
+    description: "",
+  };
+  const [newAccount, setNewAccount] = useState(emptyNewAccount);
+  const [addOpen, setAddOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -69,18 +80,52 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
     });
   }
 
+  function openAdd() {
+    setError(null);
+    setNewAccount(emptyNewAccount);
+    setAddOpen(true);
+  }
+
+  function closeAdd() {
+    setAddOpen(false);
+  }
+
   function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const n = newName.trim();
+    const n = newAccount.name.trim();
     if (!n) return;
+    const initialBalance = parseFloat(newAccount.initialBalance);
+    if (!Number.isFinite(initialBalance) || initialBalance <= 0) {
+      setError("Starting capital must be a positive number");
+      return;
+    }
+    const cost = parseFloat(newAccount.cost);
+    if (!Number.isFinite(cost) || cost < 0) {
+      setError("Cost must be a non-negative number");
+      return;
+    }
+    const numberOfAccounts = parseInt(newAccount.numberOfAccounts, 10);
+    if (!Number.isInteger(numberOfAccounts) || numberOfAccounts < 1) {
+      setError("Number of accounts must be a positive whole number");
+      return;
+    }
     startTransition(async () => {
-      const r = await createAccountAction(n);
+      const r = await createAccountAction({
+        name: n,
+        initialBalance,
+        cost,
+        propfirmName: newAccount.propfirmName || null,
+        stage: newAccount.stage,
+        numberOfAccounts,
+        description: newAccount.description.trim() || null,
+      });
       if ("error" in r && r.error) {
         setError(r.error);
         return;
       }
-      setNewName("");
+      setNewAccount(emptyNewAccount);
+      setAddOpen(false);
       refresh();
     });
   }
@@ -326,41 +371,169 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
         </p>
       ) : null}
 
-      <form
-        onSubmit={handleCreate}
-        className="flex flex-wrap items-end gap-3 rounded-lg p-4"
-        style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
-      >
-        <div className="min-w-[200px] flex-1">
-          <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
-            New account name
-          </label>
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            maxLength={120}
-            placeholder="e.g. Main SIM, Prop firm 2025"
-            className="w-full px-3 py-2 rounded-md text-sm"
-            style={{
-              background: "var(--bg-base)",
-              border: "1px solid var(--bg-border)",
-              color: "var(--text-primary)",
-            }}
-          />
-        </div>
+      <div className="flex justify-end">
         <button
-          type="submit"
-          disabled={pending || !newName.trim()}
+          type="button"
+          onClick={openAdd}
+          disabled={pending}
           className="px-4 py-2 rounded-md text-sm font-medium"
-          style={{
-            background: "var(--accent)",
-            color: "#000",
-            opacity: pending ? 0.6 : 1,
-          }}
+          style={{ background: "var(--accent)", color: "#000", opacity: pending ? 0.6 : 1 }}
         >
-          {pending ? "…" : "Add account"}
+          + Add account
         </button>
-      </form>
+      </div>
+
+      {addOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "color-mix(in srgb, #000 45%, transparent)" }}
+          onClick={closeAdd}
+        >
+          <form
+            onSubmit={handleCreate}
+            className="w-full max-w-2xl rounded-lg p-5 space-y-4 max-h-[90vh] overflow-y-auto"
+            style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+              New account
+            </h2>
+            {error ? (
+              <p
+                className="text-sm rounded-md px-3 py-2"
+                style={{ background: "color-mix(in srgb, var(--loss) 12%, var(--bg-card))", color: "var(--loss)" }}
+              >
+                {error}
+              </p>
+            ) : null}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="sm:col-span-2 lg:col-span-1">
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+              Name
+            </label>
+            <input
+              value={newAccount.name}
+              onChange={(e) => setNewAccount((f) => ({ ...f, name: e.target.value }))}
+              maxLength={120}
+              required
+              placeholder="e.g. Main SIM, Prop firm 2025"
+              className="w-full px-3 py-2 rounded-md text-sm"
+              style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+              Prop firm
+            </label>
+            <select
+              value={newAccount.propfirmName}
+              onChange={(e) => setNewAccount((f) => ({ ...f, propfirmName: e.target.value }))}
+              className="w-full px-3 py-2 rounded-md text-sm"
+              style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
+            >
+              <option value="">—</option>
+              {PROPFIRM_OPTIONS.map((firm) => (
+                <option key={firm} value={firm}>
+                  {firm}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+              Stage
+            </label>
+            <select
+              value={newAccount.stage}
+              onChange={(e) => setNewAccount((f) => ({ ...f, stage: e.target.value as AccountStage }))}
+              className="w-full px-3 py-2 rounded-md text-sm"
+              style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
+            >
+              <option value="Eval">Eval</option>
+              <option value="Funded">Funded</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+              Starting capital ($)
+            </label>
+            <input
+              type="number"
+              min={1}
+              step="any"
+              required
+              value={newAccount.initialBalance}
+              onChange={(e) => setNewAccount((f) => ({ ...f, initialBalance: e.target.value }))}
+              className="w-full px-3 py-2 rounded-md text-sm tabular-nums"
+              style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+              Cost ($)
+            </label>
+            <input
+              type="number"
+              min={0}
+              step="any"
+              required
+              value={newAccount.cost}
+              onChange={(e) => setNewAccount((f) => ({ ...f, cost: e.target.value }))}
+              className="w-full px-3 py-2 rounded-md text-sm tabular-nums"
+              style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+              # Accounts
+            </label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              required
+              value={newAccount.numberOfAccounts}
+              onChange={(e) => setNewAccount((f) => ({ ...f, numberOfAccounts: e.target.value }))}
+              className="w-full px-3 py-2 rounded-md text-sm tabular-nums"
+              style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
+            />
+          </div>
+          <div className="sm:col-span-2 lg:col-span-3">
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+              Description
+            </label>
+            <textarea
+              value={newAccount.description}
+              onChange={(e) => setNewAccount((f) => ({ ...f, description: e.target.value }))}
+              maxLength={1000}
+              rows={2}
+              placeholder="Notes about this account (optional)"
+              className="w-full px-3 py-2 rounded-md text-sm resize-y"
+              style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
+            />
+          </div>
+        </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeAdd}
+                className="text-sm px-3 py-1.5 rounded-md"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={pending || !newAccount.name.trim()}
+                className="px-4 py-2 rounded-md text-sm font-medium"
+                style={{ background: "var(--accent)", color: "#000", opacity: pending || !newAccount.name.trim() ? 0.6 : 1 }}
+              >
+                {pending ? "…" : "Add account"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
 
       <div className="rounded-lg overflow-x-auto" style={{ border: "1px solid var(--bg-border)" }}>
         <table className="w-full text-sm whitespace-nowrap">

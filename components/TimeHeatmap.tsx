@@ -76,20 +76,24 @@ function heatmapCellStyle(
   }
   const m = maxAbs > 0 ? maxAbs : 1;
   const t = totalPnl / m;
-  const a = Math.min(1, Math.abs(t));
+  // Perceptual boost: sqrt curve so small buckets aren't washed out to near-neutral.
+  const a = Math.sqrt(Math.min(1, Math.abs(t)));
   if (t >= 0) {
-    const l = 26 + a * 16;
+    // Weak → dim/desaturated; strong → bright, saturated green (wide range for clarity).
+    const l = 20 + a * 30; // 20% → 50%
+    const s = 38 + a * 42; // 38% → 80%
     return {
-      background: `hsl(145, 48%, ${l}%)`,
-      color: a > 0.4 ? "rgba(255,255,255,0.95)" : "var(--text-primary)",
-      border: "1px solid color-mix(in srgb, hsl(145, 40%, 18%) 55%, var(--bg-border))",
+      background: `hsl(145, ${s}%, ${l}%)`,
+      color: a > 0.35 ? "rgba(255,255,255,0.96)" : "var(--text-primary)",
+      border: "1px solid color-mix(in srgb, hsl(145, 45%, 18%) 55%, var(--bg-border))",
     };
   }
-  const l = 28 + a * 14;
+  const l = 22 + a * 28; // 22% → 50%
+  const s = 40 + a * 42; // 40% → 82%
   return {
-    background: `hsl(0, 48%, ${l}%)`,
-    color: a > 0.4 ? "rgba(255,255,255,0.95)" : "var(--text-primary)",
-    border: "1px solid color-mix(in srgb, hsl(0, 40%, 20%) 55%, var(--bg-border))",
+    background: `hsl(0, ${s}%, ${l}%)`,
+    color: a > 0.35 ? "rgba(255,255,255,0.96)" : "var(--text-primary)",
+    border: "1px solid color-mix(in srgb, hsl(0, 45%, 20%) 55%, var(--bg-border))",
   };
 }
 
@@ -361,7 +365,7 @@ export default function TimeHeatmap({ timeOfDay, dayOfWeek }: Props) {
                 className="h-2.5 min-w-40 max-w-64 flex-1 rounded-sm"
                 style={{
                   background:
-                    "linear-gradient(90deg, hsl(0, 50%, 30%) 0%, color-mix(in srgb, var(--bg-border) 85%, var(--bg-card)) 50%, hsl(145, 50%, 30%) 100%)",
+                    "linear-gradient(90deg, hsl(0, 82%, 50%) 0%, hsl(0, 40%, 22%) 25%, color-mix(in srgb, var(--bg-border) 85%, var(--bg-card)) 50%, hsl(145, 38%, 20%) 75%, hsl(145, 80%, 50%) 100%)",
                 }}
                 title="Losses (left) → profit (right)"
               />

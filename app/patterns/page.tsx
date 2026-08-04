@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getActiveAccountId } from "@/lib/activeAccount";
 import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
@@ -8,29 +9,72 @@ import {
   analyzeStreaks,
   analyzeEdgeDecay,
   analyzeSessionPerformance,
+  analyzeHourly,
 } from "@/lib/analytics/patterns";
 import TimeHeatmap from "@/components/TimeHeatmap";
 import SessionPerformanceGrid from "@/components/SessionPerformanceGrid";
+import HourlyPnlSummary from "@/components/HourlyPnlSummary";
 
 function fmtUsd(v: number) {
   return `${v >= 0 ? "+" : "-"}$${Math.abs(v).toFixed(2)}`;
 }
 
-export default async function PatternsPage() {
+export default async function PatternsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ scope?: string }>;
+}) {
+  const params = await searchParams;
+  const allMode = params.scope === "all";
+
   const accountId = await getActiveAccountId();
-  const trades = await prisma.trade.findMany({ where: tradesWhere(accountId), orderBy: { entryTime: "asc" } });
+  const trades = await prisma.trade.findMany({
+    where: allMode ? {} : tradesWhere(accountId),
+    orderBy: { entryTime: "asc" },
+  });
   const timeOfDay = analyzeTimeOfDay(trades);
   const dayOfWeek = analyzeDayOfWeek(trades);
   const instruments = analyzeInstruments(trades);
   const streaks = analyzeStreaks(trades);
   const edgeDecay = analyzeEdgeDecay(trades);
   const sessions = analyzeSessionPerformance(trades);
+  const hourly = analyzeHourly(trades);
 
   const decayAlerts = edgeDecay.filter((e) => e.decayAlert);
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Patterns</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold">Patterns</h1>
+        <Link
+          href={allMode ? "/patterns" : "/patterns?scope=all"}
+          className="text-sm px-3 py-1.5 rounded-md font-medium"
+          style={
+            allMode
+              ? { background: "var(--accent)", color: "#000" }
+              : { border: "1px solid var(--bg-border)", color: "var(--text-secondary)" }
+          }
+        >
+          {allMode ? "Viewing all accounts" : "View all accounts"}
+        </Link>
+      </div>
+
+      {allMode ? (
+        <div
+          className="sticky top-0 z-40 rounded-lg px-4 py-3 flex items-center gap-2 text-sm font-medium shadow-md"
+          style={{
+            background: "color-mix(in srgb, var(--accent) 18%, var(--bg-card))",
+            border: "1px solid color-mix(in srgb, var(--accent) 40%, var(--bg-border))",
+            color: "var(--accent)",
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: "var(--accent)", color: "#000" }}>
+            All accounts
+          </span>
+          Showing patterns across every account&apos;s trades ({trades.length} total). Switch back to see only the active account.
+        </div>
+      ) : null}
 
       {/* Heatmaps */}
       <div
@@ -42,6 +86,8 @@ export default async function PatternsPage() {
         </h2>
         <TimeHeatmap timeOfDay={timeOfDay} dayOfWeek={dayOfWeek} />
       </div>
+
+      <HourlyPnlSummary hourly={hourly} title="Hourly P&L (HKT, entry)" />
 
       <SessionPerformanceGrid
         sessions={sessions}

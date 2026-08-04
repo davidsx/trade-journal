@@ -104,6 +104,84 @@ export function analyzeTimeOfDay(trades: Trade[]): TimeOfDayBucket[] {
   });
 }
 
+export interface HourlyBucket {
+  /** "06:00", "07:00", … in CME trading-day order (06:00 HKT start). */
+  hourLabel: string;
+  hour: number; // HKT clock hour 0–23
+  /** 0 = 06:00 HKT (session open) … 23 = 05:00 HKT. */
+  slotIndex: number;
+  session: SessionName;
+  tradeCount: number;
+  winRate: number;
+  avgPnl: number;
+  totalPnl: number;
+  profitFactor: number;
+  bestTrade: number;
+  worstTrade: number;
+}
+
+/** 24 HKT clock hours in CME Globex trading-day order: 06, 07, …, 23, 00, …, 05. */
+export function tradingDayHoursHkt(): number[] {
+  return Array.from({ length: 24 }, (_, i) => (GLOBEX_SESSION_START_HOUR_HKT + i) % 24);
+}
+
+/** Per-hour P&L summary (by entry time, HKT), in CME trading-day order. */
+export function analyzeHourly(trades: Trade[]): HourlyBucket[] {
+  const orderedHours = tradingDayHoursHkt();
+  type Bucket = {
+    wins: number;
+    total: number;
+    pnlSum: number;
+    grossWins: number;
+    grossLosses: number;
+    best: number;
+    worst: number;
+  };
+  const empty = (): Bucket => ({
+    wins: 0,
+    total: 0,
+    pnlSum: 0,
+    grossWins: 0,
+    grossLosses: 0,
+    best: -Infinity,
+    worst: Infinity,
+  });
+  const buckets = new Map<number, Bucket>(orderedHours.map((h) => [h, empty()]));
+
+  for (const t of trades) {
+    const { h } = hktWallClock(t.entryTime);
+    const b = buckets.get(h);
+    if (!b) continue;
+    b.total++;
+    b.pnlSum += t.netPnl;
+    if (t.netPnl > 0) {
+      b.wins++;
+      b.grossWins += t.netPnl;
+    } else {
+      b.grossLosses += Math.abs(t.netPnl);
+    }
+    if (t.netPnl > b.best) b.best = t.netPnl;
+    if (t.netPnl < b.worst) b.worst = t.netPnl;
+  }
+
+  return orderedHours.map((hour, slotIndex) => {
+    const b = buckets.get(hour)!;
+    return {
+      hourLabel: `${String(hour).padStart(2, "0")}:00`,
+      hour,
+      slotIndex,
+      session: sessionFromHktWallClock(hour, 30),
+      tradeCount: b.total,
+      winRate: b.total > 0 ? b.wins / b.total : 0,
+      avgPnl: b.total > 0 ? b.pnlSum / b.total : 0,
+      totalPnl: b.pnlSum,
+      profitFactor: b.grossLosses > 0 ? b.grossWins / b.grossLosses : b.grossWins > 0 ? 999 : 0,
+      bestTrade: b.total > 0 ? b.best : 0,
+      worstTrade: b.total > 0 ? b.worst : 0,
+    };
+  });
+}
+
 export function analyzeDayOfWeek(trades: Trade[]): DayOfWeekBucket[] {
   const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const buckets = new Map<number, { wins: number; total: number; pnlSum: number }>();

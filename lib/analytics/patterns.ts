@@ -258,6 +258,73 @@ export function rankTopHoursAcrossAccounts(tradesByAccount: HourlyTradeLike[][])
     );
 }
 
+export interface SessionRankTally {
+  session: SessionName;
+  /** 3·#1 + 2·#2 + 1·#3 across accounts. */
+  weightedScore: number;
+  firsts: number;
+  seconds: number;
+  thirds: number;
+  appearances: number;
+  /** Sum of this session's total P&L across the accounts where it ranked. */
+  totalPnl: number;
+}
+
+/**
+ * Across accounts, rank each account's top 3 P&L sessions, then tally a weighted
+ * vote per session (#1=3, #2=2, #3=1). Returned sorted by weighted score desc.
+ */
+export function rankTopSessionsAcrossAccounts(tradesByAccount: HourlyTradeLike[][]): SessionRankTally[] {
+  type Tally = {
+    weightedScore: number;
+    firsts: number;
+    seconds: number;
+    thirds: number;
+    appearances: number;
+    totalPnl: number;
+  };
+  const tallies = new Map<SessionName, Tally>();
+
+  for (const trades of tradesByAccount) {
+    if (trades.length === 0) continue;
+    const bySession = new Map<SessionName, number>();
+    for (const t of trades) {
+      const s = getEntrySessionName(t.entryTime);
+      bySession.set(s, (bySession.get(s) ?? 0) + t.netPnl);
+    }
+    const top3 = [...bySession.entries()]
+      .filter(([, pnl]) => pnl > 0)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3);
+
+    top3.forEach(([session, pnl], i) => {
+      const t = tallies.get(session) ?? {
+        weightedScore: 0,
+        firsts: 0,
+        seconds: 0,
+        thirds: 0,
+        appearances: 0,
+        totalPnl: 0,
+      };
+      t.weightedScore += HOUR_RANK_WEIGHTS[i];
+      if (i === 0) t.firsts++;
+      else if (i === 1) t.seconds++;
+      else t.thirds++;
+      t.appearances++;
+      t.totalPnl += pnl;
+      tallies.set(session, t);
+    });
+  }
+
+  return [...tallies.entries()]
+    .map(([session, t]) => ({ session, ...t }))
+    .sort((a, b) =>
+      b.weightedScore - a.weightedScore ||
+      b.firsts - a.firsts ||
+      b.totalPnl - a.totalPnl
+    );
+}
+
 export function analyzeDayOfWeek(trades: Trade[]): DayOfWeekBucket[] {
   const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const buckets = new Map<number, { wins: number; total: number; pnlSum: number }>();

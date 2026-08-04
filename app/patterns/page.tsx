@@ -11,11 +11,13 @@ import {
   analyzeSessionPerformance,
   analyzeHourly,
   rankTopHoursAcrossAccounts,
+  rankTopSessionsAcrossAccounts,
 } from "@/lib/analytics/patterns";
 import TimeHeatmap from "@/components/TimeHeatmap";
 import SessionPerformanceGrid from "@/components/SessionPerformanceGrid";
 import HourlyPnlSummary from "@/components/HourlyPnlSummary";
 import TopHoursAcrossAccounts from "@/components/TopHoursAcrossAccounts";
+import TopSessionsAcrossAccounts from "@/components/TopSessionsAcrossAccounts";
 
 function fmtUsd(v: number) {
   return `${v >= 0 ? "+" : "-"}$${Math.abs(v).toFixed(2)}`;
@@ -56,6 +58,7 @@ export default async function PatternsPage({
   const tradesByAccount = [...tradesByAccountMap.values()];
   const accountsCounted = tradesByAccount.filter((a) => a.length > 0).length;
   const topHours = rankTopHoursAcrossAccounts(tradesByAccount);
+  const topSessions = rankTopSessionsAcrossAccounts(tradesByAccount);
 
   const decayAlerts = edgeDecay.filter((e) => e.decayAlert);
 
@@ -112,6 +115,8 @@ export default async function PatternsPage({
         sessions={sessions}
         title="Session Performance (HKT)"
       />
+
+      <TopSessionsAcrossAccounts tallies={topSessions} accountsCounted={accountsCounted} />
 
       {/* Instrument breakdown */}
       <div

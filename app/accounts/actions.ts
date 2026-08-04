@@ -71,6 +71,46 @@ export async function deleteAccountAction(accountId: number) {
   return { ok: true as const };
 }
 
+export type AccountDetailsInput = {
+  propfirmName: string | null;
+  description: string | null;
+  breached: boolean;
+  numberOfAccounts: number;
+  stage: "Eval" | "Funded";
+  cost: number;
+};
+
+export async function updateAccountDetailsAction(accountId: number, details: AccountDetailsInput) {
+  const exists = await prisma.account.findUnique({ where: { id: accountId } });
+  if (!exists) return { error: "Account not found" };
+
+  const propfirmName = details.propfirmName?.trim() || null;
+  if (propfirmName && propfirmName.length > 120) return { error: "Prop firm name is too long (max 120 characters)" };
+  const description = details.description?.trim() || null;
+  if (description && description.length > 1000) return { error: "Description is too long (max 1000 characters)" };
+  if (!Number.isInteger(details.numberOfAccounts) || details.numberOfAccounts < 1) {
+    return { error: "Number of accounts must be a positive whole number" };
+  }
+  if (details.stage !== "Eval" && details.stage !== "Funded") return { error: "Invalid stage" };
+  if (!Number.isFinite(details.cost) || details.cost < 0) {
+    return { error: "Cost must be a non-negative number" };
+  }
+
+  await prisma.account.update({
+    where: { id: accountId },
+    data: {
+      propfirmName,
+      description,
+      breached: details.breached,
+      numberOfAccounts: details.numberOfAccounts,
+      stage: details.stage,
+      cost: details.cost,
+    },
+  });
+  revalidateAll();
+  return { ok: true as const };
+}
+
 export async function updateAccountInitialBalanceAction(accountId: number, initialBalance: number) {
   if (!Number.isFinite(initialBalance) || initialBalance <= 0) {
     return { error: "Starting capital must be a positive number" };

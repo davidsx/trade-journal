@@ -7,10 +7,27 @@ datasource db {
   provider = "postgresql"
 }
 
+enum Stage {
+  Eval
+  Funded
+}
+
 /** Prop / SIM / cleared account; starting capital lives only on this row. */
 model Account {
   id              Int      @id @default(autoincrement())
   name            String
+  /** Prop firm this account belongs to (e.g. Lucid, Apex). */
+  propfirmName    String?
+  /** Free-form notes about the account. */
+  description     String?
+  /** Whether the account has been breached / blown. */
+  breached        Boolean  @default(false)
+  /** How many live accounts this row represents (copy trading). */
+  numberOfAccounts Int     @default(1)
+  /** Eval vs Funded phase. */
+  stage           Stage    @default(Eval)
+  /** Purchase / eval cost paid for this account (USD). */
+  cost            Float    @default(0)
   /** Starting account size for equity curve, capital chain, and CSV import (single source per account). */
   initialBalance  Float    @default(50000)
   createdAt       DateTime @default(now())

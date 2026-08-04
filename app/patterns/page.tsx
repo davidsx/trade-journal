@@ -10,10 +10,12 @@ import {
   analyzeEdgeDecay,
   analyzeSessionPerformance,
   analyzeHourly,
+  rankTopHoursAcrossAccounts,
 } from "@/lib/analytics/patterns";
 import TimeHeatmap from "@/components/TimeHeatmap";
 import SessionPerformanceGrid from "@/components/SessionPerformanceGrid";
 import HourlyPnlSummary from "@/components/HourlyPnlSummary";
+import TopHoursAcrossAccounts from "@/components/TopHoursAcrossAccounts";
 
 function fmtUsd(v: number) {
   return `${v >= 0 ? "+" : "-"}$${Math.abs(v).toFixed(2)}`;
@@ -39,6 +41,21 @@ export default async function PatternsPage({
   const edgeDecay = analyzeEdgeDecay(trades);
   const sessions = analyzeSessionPerformance(trades);
   const hourly = analyzeHourly(trades);
+
+  // Weighted "top hours" vote — always across every account, regardless of scope.
+  const allTrades = await prisma.trade.findMany({
+    orderBy: { entryTime: "asc" },
+    select: { entryTime: true, netPnl: true, accountId: true },
+  });
+  const tradesByAccountMap = new Map<number, typeof allTrades>();
+  for (const t of allTrades) {
+    const arr = tradesByAccountMap.get(t.accountId);
+    if (arr) arr.push(t);
+    else tradesByAccountMap.set(t.accountId, [t]);
+  }
+  const tradesByAccount = [...tradesByAccountMap.values()];
+  const accountsCounted = tradesByAccount.filter((a) => a.length > 0).length;
+  const topHours = rankTopHoursAcrossAccounts(tradesByAccount);
 
   const decayAlerts = edgeDecay.filter((e) => e.decayAlert);
 
@@ -88,6 +105,8 @@ export default async function PatternsPage({
       </div>
 
       <HourlyPnlSummary hourly={hourly} title="Hourly P&L (HKT, entry)" />
+
+      <TopHoursAcrossAccounts tallies={topHours} accountsCounted={accountsCounted} />
 
       <SessionPerformanceGrid
         sessions={sessions}

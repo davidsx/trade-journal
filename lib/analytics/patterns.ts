@@ -126,7 +126,7 @@ export function tradingDayHoursHkt(): number[] {
 }
 
 /** Per-hour P&L summary (by entry time, HKT), in CME trading-day order. */
-export function analyzeHourly(trades: Trade[]): HourlyBucket[] {
+export function analyzeHourly(trades: ReadonlyArray<{ entryTime: Date; netPnl: number }>): HourlyBucket[] {
   const orderedHours = tradingDayHoursHkt();
   type Bucket = {
     wins: number;
@@ -180,6 +180,82 @@ export function analyzeHourly(trades: Trade[]): HourlyBucket[] {
       worstTrade: b.total > 0 ? b.worst : 0,
     };
   });
+}
+
+export interface HourRankTally {
+  hour: number;
+  hourLabel: string;
+  session: SessionName;
+  /** 3·#1 + 2·#2 + 1·#3 across accounts. */
+  weightedScore: number;
+  firsts: number;
+  seconds: number;
+  thirds: number;
+  /** Accounts where this hour landed in the top 3. */
+  appearances: number;
+  /** Sum of this hour's total P&L across the accounts where it ranked. */
+  totalPnl: number;
+}
+
+/** #1 → 3 pts, #2 → 2 pts, #3 → 1 pt. */
+const HOUR_RANK_WEIGHTS = [3, 2, 1] as const;
+
+/** Minimal fields `analyzeHourly` needs, for lightweight cross-account calls. */
+type HourlyTradeLike = { entryTime: Date; netPnl: number };
+
+/**
+ * Across accounts, rank each account's top 3 P&L hours, then tally a weighted
+ * vote per hour (#1=3, #2=2, #3=1). Returned sorted by weighted score desc.
+ */
+export function rankTopHoursAcrossAccounts(tradesByAccount: HourlyTradeLike[][]): HourRankTally[] {
+  type Tally = {
+    weightedScore: number;
+    firsts: number;
+    seconds: number;
+    thirds: number;
+    appearances: number;
+    totalPnl: number;
+  };
+  const tallies = new Map<number, Tally>();
+
+  for (const trades of tradesByAccount) {
+    if (trades.length === 0) continue;
+    const top3 = analyzeHourly(trades)
+      .filter((b) => b.tradeCount > 0 && b.totalPnl > 0)
+      .sort((a, b) => b.totalPnl - a.totalPnl)
+      .slice(0, 3);
+
+    top3.forEach((bucket, i) => {
+      const t = tallies.get(bucket.hour) ?? {
+        weightedScore: 0,
+        firsts: 0,
+        seconds: 0,
+        thirds: 0,
+        appearances: 0,
+        totalPnl: 0,
+      };
+      t.weightedScore += HOUR_RANK_WEIGHTS[i];
+      if (i === 0) t.firsts++;
+      else if (i === 1) t.seconds++;
+      else t.thirds++;
+      t.appearances++;
+      t.totalPnl += bucket.totalPnl;
+      tallies.set(bucket.hour, t);
+    });
+  }
+
+  return [...tallies.entries()]
+    .map(([hour, t]) => ({
+      hour,
+      hourLabel: `${String(hour).padStart(2, "0")}:00`,
+      session: sessionFromHktWallClock(hour, 30),
+      ...t,
+    }))
+    .sort((a, b) =>
+      b.weightedScore - a.weightedScore ||
+      b.firsts - a.firsts ||
+      b.totalPnl - a.totalPnl
+    );
 }
 
 export function analyzeDayOfWeek(trades: Trade[]): DayOfWeekBucket[] {

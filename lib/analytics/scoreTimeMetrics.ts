@@ -5,10 +5,10 @@ import { GLOBEX_SESSION_START_HOUR_HKT, tradingDayWeekdayIndexHkt } from "@/lib/
 const HKT_OFFSET_MS = 8 * 60 * 60 * 1000;
 
 const SESSION_ORDER: { session: SessionName; hktRange: string }[] = [
-  { session: "Asia", hktRange: "8:00am – 4:00pm" },
-  { session: "London", hktRange: "4:00pm – 9:30pm" },
-  { session: "NY", hktRange: "9:30pm – 5:00am" },
-  { session: "Off-hours", hktRange: "5:00am – 8:00am" },
+  { session: "Asia", hktRange: "6:00am – 4:00pm" },
+  { session: "London", hktRange: "4:00pm – 9:00pm" },
+  { session: "NY", hktRange: "9:00pm – 5:00am" },
+  { session: "Off-hours", hktRange: "5:00am – 6:00am" },
 ];
 
 const DOW_HKT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

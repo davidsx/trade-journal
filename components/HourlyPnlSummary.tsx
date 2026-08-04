@@ -120,7 +120,7 @@ export default function HourlyPnlSummary({ hourly, title = "Hourly P&L (HKT, ent
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--bg-border)" }}>
-                {["Hour", "Session", "Trades", "Win %", "Total P&L", "P&L", "Avg", "PF", "Best", "Worst"].map((h) => (
+                {["Hour", "Session", "Trades", "Win %", "Total P&L", "P&L", "P&L / trade", "PF", "Best", "Worst"].map((h) => (
                   <th
                     key={h}
                     className={`pb-2 text-xs uppercase tracking-wide ${

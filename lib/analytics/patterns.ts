@@ -303,10 +303,10 @@ export function analyzeStreaks(trades: Trade[]): StreakAnalysis {
 }
 
 // Session boundaries in UTC hours (HKT = UTC+8)
-// Asia    00:00–08:00 UTC  ↔  08:00–16:00 HKT
-// London  08:00–13:30 UTC  ↔  16:00–21:30 HKT
-// NY      13:30–21:00 UTC  ↔  21:30–05:00 HKT
-// Off     21:00–24:00 UTC  ↔  05:00–08:00 HKT
+// Asia    22:00–08:00 UTC  ↔  06:00–16:00 HKT
+// London  08:00–13:00 UTC  ↔  16:00–21:00 HKT
+// NY      13:00–21:00 UTC  ↔  21:00–05:00 HKT
+// Off     21:00–22:00 UTC  ↔  05:00–06:00 HKT (daily Globex break)
 
 export type SessionName = "Asia" | "London" | "NY" | "Off-hours";
 
@@ -329,10 +329,11 @@ export interface SessionPattern {
 
 function getSession(utcHour: number, utcMinute: number): SessionName {
   const h = utcHour + utcMinute / 60;
-  if (h < 8)   return "Asia";
-  if (h < 13.5) return "London";
-  if (h < 21)  return "NY";
-  return "Off-hours";
+  // Asia 06:00–16:00 HKT wraps midnight in UTC (22:00–08:00).
+  if (h >= 22 || h < 8) return "Asia";
+  if (h < 13) return "London"; // 16:00–21:00 HKT
+  if (h < 21) return "NY";     // 21:00–05:00 HKT
+  return "Off-hours";          // 05:00–06:00 HKT (daily break)
 }
 
 /** Map entry instant (stored in UTC) to chart session: Asia / London / NY / Off-hours. */
@@ -367,10 +368,10 @@ export function analyzeSessionPerformanceLite(
 
 export function analyzeSessionPerformance(trades: Trade[]): SessionPattern[] {
   const DEFS: { session: SessionName; hktRange: string }[] = [
-    { session: "Asia",      hktRange: "8:00am – 4:00pm" },
-    { session: "London",    hktRange: "4:00pm – 9:30pm" },
-    { session: "NY",        hktRange: "9:30pm – 5:00am" },
-    { session: "Off-hours", hktRange: "5:00am – 8:00am" },
+    { session: "Asia",      hktRange: "6:00am – 4:00pm" },
+    { session: "London",    hktRange: "4:00pm – 9:00pm" },
+    { session: "NY",        hktRange: "9:00pm – 5:00am" },
+    { session: "Off-hours", hktRange: "5:00am – 6:00am" },
   ];
 
   type Bucket = {

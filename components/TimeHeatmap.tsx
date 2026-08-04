@@ -124,28 +124,28 @@ function sessionColumnMeta(s: SessionName): { bg: string; fg: string; abbr: stri
         bg: "color-mix(in srgb, #8b5cf6 22%, var(--bg-card))",
         fg: "#c4b5fd",
         abbr: "A",
-        title: "Asia · 08:00–16:00 HKT (chart session)",
+        title: "Asia · 06:00–16:00 HKT (chart session)",
       };
     case "London":
       return {
         bg: "color-mix(in srgb, #3b82f6 20%, var(--bg-card))",
         fg: "#93c5fd",
         abbr: "L",
-        title: "London · 16:00–21:30 HKT",
+        title: "London · 16:00–21:00 HKT",
       };
     case "NY":
       return {
         bg: "color-mix(in srgb, #22c55e 18%, var(--bg-card))",
         fg: "#86efac",
         abbr: "N",
-        title: "NY · 21:30–05:00 HKT",
+        title: "NY · 21:00–05:00 HKT",
       };
     default:
       return {
         bg: "color-mix(in srgb, #6b7280 24%, var(--bg-card))",
         fg: "#d1d5db",
         abbr: "O",
-        title: "Off-hours · 05:00–08:00 HKT",
+        title: "Off-hours · 05:00–06:00 HKT",
       };
   }
 }

@@ -37,7 +37,7 @@ export default function SessionPerformanceGrid({
         <RefreshLiveTimeButton onClick={() => setNow(new Date())} />
       </div>
       <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
-        Asia 08:00–16:00 · London 16:00–21:30 · NY 21:30–05:00 · Off 05:00–08:00 HKT.
+        Asia 06:00–16:00 · London 16:00–21:00 · NY 21:00–05:00 · Off 05:00–06:00 HKT.
       </p>
       <div className={gridClassName}>
         {sessions.map((s) => {

@@ -147,6 +147,17 @@ export async function updateAccountDetailsAction(accountId: number, details: Acc
   return { ok: true as const };
 }
 
+export async function setAccountHiddenFromStatsAction(accountId: number, hidden: boolean) {
+  const exists = await prisma.account.findUnique({ where: { id: accountId } });
+  if (!exists) return { error: "Account not found" };
+  await prisma.account.update({
+    where: { id: accountId },
+    data: { hiddenFromStats: hidden },
+  });
+  revalidateAll();
+  return { ok: true as const };
+}
+
 export async function updateAccountInitialBalanceAction(accountId: number, initialBalance: number) {
   if (!Number.isFinite(initialBalance) || initialBalance <= 0) {
     return { error: "Starting capital must be a positive number" };

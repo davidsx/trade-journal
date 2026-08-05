@@ -1,0 +1,1 @@
+ALTER TABLE "Account" ADD COLUMN "hiddenFromStats" BOOLEAN NOT NULL DEFAULT false;

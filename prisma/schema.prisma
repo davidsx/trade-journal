@@ -28,6 +28,8 @@ model Account {
   stage           Stage    @default(Eval)
   /** Purchase / eval cost paid for this account (USD). */
   cost            Float    @default(0)
+  /** Exclude this account from cross-account calculations (still switchable individually). */
+  hiddenFromStats Boolean  @default(false)
   /** Starting account size for equity curve, capital chain, and CSV import (single source per account). */
   initialBalance  Float    @default(50000)
   createdAt       DateTime @default(now())

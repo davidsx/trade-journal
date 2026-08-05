@@ -6,6 +6,7 @@ import {
   createAccountAction,
   deleteAccountAction,
   renameAccountAction,
+  setAccountHiddenFromStatsAction,
   switchAccountAction,
   updateAccountDetailsAction,
   updateAccountInitialBalanceAction,
@@ -25,6 +26,7 @@ export type AccountRow = {
   numberOfAccounts: number;
   stage: AccountStage;
   cost: number;
+  hiddenFromStats: boolean;
   pnl: number;
   initialBalance: number;
   createdAt: string;
@@ -260,6 +262,21 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
       if ("error" in r && r.error) {
         setError(r.error);
         setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, breached: a.breached } : x)));
+        return;
+      }
+      refresh();
+    });
+  }
+
+  function toggleHiddenFromStats(a: AccountRow) {
+    setError(null);
+    const next = !a.hiddenFromStats;
+    setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, hiddenFromStats: next } : x)));
+    startTransition(async () => {
+      const r = await setAccountHiddenFromStatsAction(a.id, next);
+      if ("error" in r && r.error) {
+        setError(r.error);
+        setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, hiddenFromStats: a.hiddenFromStats } : x)));
         return;
       }
       refresh();
@@ -554,6 +571,9 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
               <th className="px-4 py-2 text-center text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
                 Breached
               </th>
+              <th className="px-4 py-2 text-center text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }} title="Include this account in cross-account calculations">
+                In stats
+              </th>
               <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
                 # Accts
               </th>
@@ -584,6 +604,7 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
                     background: i % 2 === 0 ? "var(--bg-card)" : "var(--bg-base)",
                     borderBottom: "1px solid var(--bg-border)",
                     boxShadow: isActive ? "inset 3px 0 0 0 var(--accent)" : undefined,
+                    opacity: a.hiddenFromStats ? 0.55 : 1,
                   }}
                 >
                   <td className="px-4 py-2 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>
@@ -707,6 +728,26 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
                       title={`Click to mark as ${a.breached ? "not breached" : "breached"}`}
                     >
                       {a.breached ? "Breached" : "OK"}
+                    </button>
+                  </td>
+                  <td className="px-4 py-2 text-center">
+                    <button
+                      type="button"
+                      onClick={() => toggleHiddenFromStats(a)}
+                      disabled={pending}
+                      className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded hover:opacity-80 transition-opacity"
+                      style={
+                        a.hiddenFromStats
+                          ? { background: "var(--bg-border)", color: "var(--text-muted)" }
+                          : { background: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)" }
+                      }
+                      title={
+                        a.hiddenFromStats
+                          ? "Hidden from cross-account calculations — click to include"
+                          : "Included in cross-account calculations — click to hide"
+                      }
+                    >
+                      {a.hiddenFromStats ? "Hidden" : "Included"}
                     </button>
                   </td>
                   <td className="px-4 py-2">

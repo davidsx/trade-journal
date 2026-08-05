@@ -32,8 +32,20 @@ export default async function PatternsPage({
   const allMode = params.scope === "all";
 
   const accountId = await getActiveAccountId();
+
+  // Accounts excluded from cross-account calculations.
+  const hiddenAccounts = await prisma.account.findMany({
+    where: { hiddenFromStats: true },
+    select: { id: true },
+  });
+  const hiddenIds = hiddenAccounts.map((a) => a.id);
+
   const trades = await prisma.trade.findMany({
-    where: allMode ? {} : tradesWhere(accountId),
+    where: allMode
+      ? hiddenIds.length > 0
+        ? { accountId: { notIn: hiddenIds } }
+        : {}
+      : tradesWhere(accountId),
     orderBy: { entryTime: "asc" },
   });
   const timeOfDay = analyzeTimeOfDay(trades);
@@ -44,8 +56,9 @@ export default async function PatternsPage({
   const sessions = analyzeSessionPerformance(trades);
   const hourly = analyzeHourly(trades);
 
-  // Weighted "top hours" vote — always across every account, regardless of scope.
+  // Weighted "top hours" vote — across every account, excluding hidden ones.
   const allTrades = await prisma.trade.findMany({
+    where: hiddenIds.length > 0 ? { accountId: { notIn: hiddenIds } } : {},
     orderBy: { entryTime: "asc" },
     select: { entryTime: true, netPnl: true, accountId: true },
   });
@@ -92,7 +105,8 @@ export default async function PatternsPage({
           <span className="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: "var(--accent)", color: "#000" }}>
             All accounts
           </span>
-          Showing patterns across every account&apos;s trades ({trades.length} total). Switch back to see only the active account.
+          Showing patterns across every account&apos;s trades ({trades.length} total
+          {hiddenIds.length > 0 ? `, ${hiddenIds.length} account${hiddenIds.length === 1 ? "" : "s"} hidden` : ""}). Switch back to see only the active account.
         </div>
       ) : null}
 

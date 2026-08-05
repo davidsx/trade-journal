@@ -22,6 +22,7 @@ function revalidateAll() {
 export async function switchAccountAction(accountId: number) {
   const acc = await prisma.account.findUnique({ where: { id: accountId } });
   if (!acc) return { error: "Account not found" };
+  if (acc.hiddenFromStats) return { error: "This account is hidden. Unhide it on the Accounts page to select it." };
   (await cookies()).set(ACTIVE_ACCOUNT_COOKIE, String(accountId), COOKIE_OPTIONS);
   revalidateAll();
   return { ok: true as const };
@@ -98,7 +99,9 @@ export async function deleteAccountAction(accountId: number) {
   await prisma.account.delete({ where: { id: accountId } });
 
   if (current === accountId) {
-    const other = await prisma.account.findFirst({ orderBy: { id: "asc" } });
+    const other =
+      (await prisma.account.findFirst({ where: { hiddenFromStats: false }, orderBy: { id: "desc" } })) ??
+      (await prisma.account.findFirst({ orderBy: { id: "asc" } }));
     if (other) {
       (await cookies()).set(ACTIVE_ACCOUNT_COOKIE, String(other.id), COOKIE_OPTIONS);
     }

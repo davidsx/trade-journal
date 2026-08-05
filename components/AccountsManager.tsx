@@ -649,6 +649,14 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
                               active
                             </span>
                           </span>
+                        ) : a.hiddenFromStats ? (
+                          <span
+                            className="font-medium text-left"
+                            style={{ color: "var(--text-muted)" }}
+                            title="Hidden accounts can't be selected — set to Included first"
+                          >
+                            {a.name}
+                          </span>
                         ) : (
                           <button
                             type="button"

@@ -21,7 +21,11 @@ export default async function RootLayout({
 }>) {
   const [activeAccount, allAccounts] = await Promise.all([
     getActiveAccount(),
-    prisma.account.findMany({ orderBy: { id: "asc" }, select: { id: true, name: true } }),
+    prisma.account.findMany({
+      where: { hiddenFromStats: false },
+      orderBy: { id: "asc" },
+      select: { id: true, name: true },
+    }),
   ]);
   return (
     <html lang="en" className="h-full">

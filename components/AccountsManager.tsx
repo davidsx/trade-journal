@@ -12,6 +12,7 @@ import {
   updateAccountInitialBalanceAction,
 } from "@/app/accounts/actions";
 import { DEFAULT_INITIAL_BALANCE } from "@/lib/accountConstants";
+import CsvUpload from "@/components/CsvUpload";
 
 export type AccountStage = "Eval" | "Funded";
 
@@ -388,7 +389,8 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
         </p>
       ) : null}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end items-center gap-2">
+        <CsvUpload variant="inline" />
         <button
           type="button"
           onClick={openAdd}
@@ -914,6 +916,22 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
                   <td className="px-4 py-2">
                     {editingId === a.id ? null : (
                       <div className="flex flex-wrap gap-2 justify-end">
+                        <a
+                          href={`/api/account-report?accountId=${a.id}`}
+                          className="p-1.5 rounded-md hover:opacity-80 transition-opacity inline-flex"
+                          style={{
+                            color: "var(--text-secondary)",
+                            border: "1px solid var(--bg-border)",
+                          }}
+                          title={`Export PDF report for “${a.name}”`}
+                          aria-label="Export PDF report"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <path d="M7 10l5 5 5-5" />
+                            <path d="M12 15V3" />
+                          </svg>
+                        </a>
                         <button
                           type="button"
                           onClick={() => requestDelete(a)}

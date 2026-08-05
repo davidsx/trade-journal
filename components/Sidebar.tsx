@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import AccountSwitcher from "./AccountSwitcher";
-import CsvUpload from "./CsvUpload";
 
 function Icon({ d, size = 16 }: { d: string; size?: number }) {
   return (
@@ -118,23 +117,6 @@ export default function Sidebar({ activeAccount, accounts }: SidebarProps) {
       <div className="mt-2 shrink-0 border-t pt-3" style={{ borderColor: "var(--bg-border)" }}>
         <AccountSwitcher activeId={activeAccount.id} accounts={accounts} compact={collapsed} />
       </div>
-
-      {!collapsed && (
-        <div className="mt-1 shrink-0 px-2 space-y-2">
-          <a
-            href={`/api/account-report?accountId=${activeAccount.id}`}
-            className="flex h-9 w-full min-h-9 shrink-0 items-center justify-center rounded-md border px-3 text-center text-xs font-medium leading-none transition-colors"
-            style={{
-              background: "var(--bg-border)",
-              color: "var(--text-secondary)",
-              borderColor: "var(--bg-border)",
-            }}
-          >
-            Export PDF report
-          </a>
-          <CsvUpload />
-        </div>
-      )}
 
       {/* Toggle button */}
       <button

@@ -24,7 +24,12 @@ async function runPool<T>(items: T[], concurrency: number, fn: (item: T) => Prom
   );
 }
 
-export default function CsvUpload() {
+type CsvUploadProps = {
+  /** "sidebar" (default): full-width trigger pinned to the bottom. "inline": compact button for toolbars. */
+  variant?: "sidebar" | "inline";
+};
+
+export default function CsvUpload({ variant = "sidebar" }: CsvUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
@@ -134,8 +139,10 @@ export default function CsvUpload() {
 
   const isLoading = status === "uploading";
 
+  const inline = variant === "inline";
+
   return (
-    <div className="mt-auto">
+    <div className={inline ? "inline-flex flex-col items-stretch" : "mt-auto"}>
       <input
         ref={inputRef}
         type="file"
@@ -144,16 +151,26 @@ export default function CsvUpload() {
         onChange={handleChange}
       />
 
-      {/* Sidebar trigger — opens the import modal */}
-      <button
-        onClick={() => setOpen(true)}
-        className="flex h-9 w-full min-h-9 shrink-0 items-center justify-center rounded-md px-3 text-center text-xs font-medium leading-none transition-colors"
-        style={{ background: "var(--accent)", color: "#000" }}
-      >
-        Import CSV
-      </button>
+      {/* Trigger — opens the import modal */}
+      {inline ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="px-4 py-2 rounded-md text-sm font-medium"
+          style={{ border: "1px solid var(--bg-border)", color: "var(--text-secondary)" }}
+        >
+          Import CSV
+        </button>
+      ) : (
+        <button
+          onClick={() => setOpen(true)}
+          className="flex h-9 w-full min-h-9 shrink-0 items-center justify-center rounded-md px-3 text-center text-xs font-medium leading-none transition-colors"
+          style={{ background: "var(--accent)", color: "#000" }}
+        >
+          Import CSV
+        </button>
+      )}
 
-      {/* Compact status echo in the sidebar while a modal-triggered import runs */}
+      {/* Compact status echo (when modal closed) while an import runs */}
       {message && !open && (
         <p
           className="mt-2 text-xs text-center px-1"

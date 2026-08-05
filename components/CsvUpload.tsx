@@ -28,6 +28,7 @@ export default function CsvUpload() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
   const router = useRouter();
 
   async function handleFile(file: File) {
@@ -134,7 +135,7 @@ export default function CsvUpload() {
   const isLoading = status === "uploading";
 
   return (
-    <div className="mt-auto space-y-2">
+    <div className="mt-auto">
       <input
         ref={inputRef}
         type="file"
@@ -143,27 +144,19 @@ export default function CsvUpload() {
         onChange={handleChange}
       />
 
-      {/* Drop zone / button */}
+      {/* Sidebar trigger — opens the import modal */}
       <button
-        onClick={() => inputRef.current?.click()}
-        disabled={isLoading}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={handleDrop}
-        className="flex h-9 w-full min-h-9 shrink-0 items-center justify-center rounded-md border border-transparent px-3 text-center text-xs font-medium leading-none transition-colors"
-        style={{
-          background: isLoading ? "var(--accent-dim)" : "var(--accent)",
-          color: "#000",
-          opacity: isLoading ? 0.7 : 1,
-          cursor: isLoading ? "not-allowed" : "pointer",
-          border: "1px dashed transparent",
-        }}
+        onClick={() => setOpen(true)}
+        className="flex h-9 w-full min-h-9 shrink-0 items-center justify-center rounded-md px-3 text-center text-xs font-medium leading-none transition-colors"
+        style={{ background: "var(--accent)", color: "#000" }}
       >
-        {isLoading ? "Importing…" : "Import CSV"}
+        Import CSV
       </button>
 
-      {message && (
+      {/* Compact status echo in the sidebar while a modal-triggered import runs */}
+      {message && !open && (
         <p
-          className="text-xs text-center px-1"
+          className="mt-2 text-xs text-center px-1"
           style={{
             color: status === "error" ? "var(--loss)" : status === "done" ? "var(--profit)" : "var(--text-muted)",
           }}
@@ -172,11 +165,82 @@ export default function CsvUpload() {
         </p>
       )}
 
-      <p className="text-xs text-center" style={{ color: "var(--text-muted)" }}>
-        Use your broker’s Performance / P&L export:
-        <br />
-        tabular CSV with fills, prices, and timestamps
-      </p>
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "color-mix(in srgb, #000 45%, transparent)" }}
+          onClick={() => !isLoading && setOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg p-5 space-y-4"
+            style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+                Import trades from CSV
+              </h2>
+              <button
+                type="button"
+                onClick={() => !isLoading && setOpen(false)}
+                disabled={isLoading}
+                className="text-lg leading-none px-1"
+                style={{ color: "var(--text-muted)", opacity: isLoading ? 0.4 : 1 }}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+
+            <div
+              className="rounded-md p-3 text-xs leading-relaxed"
+              style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-secondary)" }}
+            >
+              Use your broker’s <strong>Performance / P&amp;L export</strong>: a tabular CSV with fills, prices, and
+              timestamps. Rows are matched into round-trip trades, scored, and merged into the active account —
+              re-importing an overlapping range replaces those trades rather than duplicating them.
+            </div>
+
+            {/* Drop zone / file picker */}
+            <button
+              onClick={() => inputRef.current?.click()}
+              disabled={isLoading}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              className="flex min-h-24 w-full flex-col items-center justify-center gap-1 rounded-md px-3 py-6 text-center text-sm font-medium transition-colors"
+              style={{
+                background: isLoading ? "var(--accent-dim)" : "color-mix(in srgb, var(--accent) 10%, var(--bg-base))",
+                color: isLoading ? "#000" : "var(--text-primary)",
+                border: "1px dashed color-mix(in srgb, var(--accent) 45%, var(--bg-border))",
+                opacity: isLoading ? 0.8 : 1,
+                cursor: isLoading ? "not-allowed" : "pointer",
+              }}
+            >
+              {isLoading ? (
+                "Importing…"
+              ) : (
+                <>
+                  <span>Click to choose a .csv file</span>
+                  <span className="text-xs font-normal" style={{ color: "var(--text-muted)" }}>
+                    or drag &amp; drop it here
+                  </span>
+                </>
+              )}
+            </button>
+
+            {message && (
+              <p
+                className="text-xs text-center px-1"
+                style={{
+                  color: status === "error" ? "var(--loss)" : status === "done" ? "var(--profit)" : "var(--text-muted)",
+                }}
+              >
+                {message}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

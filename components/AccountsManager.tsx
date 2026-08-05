@@ -13,20 +13,31 @@ import {
 } from "@/app/accounts/actions";
 import { DEFAULT_INITIAL_BALANCE } from "@/lib/accountConstants";
 import CsvUpload from "@/components/CsvUpload";
+import { accountLabel } from "@/lib/accountLabel";
 
 export type AccountStage = "Eval" | "Funded";
+export type AccountStatus = "Running" | "Passed" | "Breached";
+
+/** Statuses selectable per type: Funded has no "Passed" phase (eval-only). */
+function allowedStatuses(stage: AccountStage): AccountStatus[] {
+  return stage === "Funded" ? ["Running", "Breached"] : ["Running", "Passed", "Breached"];
+}
 
 const PROPFIRM_OPTIONS = ["Lucid", "Tradeify", "Apex", "FundedNext", "Topstep"] as const;
+
+/** Selectable starting-capital account sizes ($). */
+const CAPITAL_OPTIONS = [25_000, 50_000, 100_000, 150_000] as const;
 
 export type AccountRow = {
   id: number;
   name: string;
   propfirmName: string | null;
   description: string | null;
-  breached: boolean;
+  status: AccountStatus;
   numberOfAccounts: number;
   stage: AccountStage;
   cost: number;
+  payout: number;
   hiddenFromStats: boolean;
   pnl: number;
   initialBalance: number;
@@ -58,14 +69,20 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
   const [addOpen, setAddOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editName, setEditName] = useState("");
   const [deleting, setDeleting] = useState<AccountRow | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState("");
-  const [capitalEditId, setCapitalEditId] = useState<number | null>(null);
-  const [capitalValue, setCapitalValue] = useState("");
+  const [editAcct, setEditAcct] = useState<AccountRow | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", propfirmName: "", initialBalance: "" });
   const [costEditId, setCostEditId] = useState<number | null>(null);
   const [costValue, setCostValue] = useState("");
+  const [payoutEditId, setPayoutEditId] = useState<number | null>(null);
+  const [payoutValue, setPayoutValue] = useState("");
+  const [showHidden, setShowHidden] = useState(false);
+
+  const totalCost = accounts.reduce((sum, a) => sum + a.cost * a.numberOfAccounts, 0);
+  const totalPayout = accounts.reduce((sum, a) => sum + a.payout, 0);
+  const hiddenCount = accounts.filter((a) => a.hiddenFromStats).length;
+  const visibleAccounts = showHidden ? accounts : accounts.filter((a) => !a.hiddenFromStats);
 
   function refresh() {
     router.refresh();
@@ -134,44 +151,77 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
   }
 
   function startEdit(a: AccountRow) {
-    setCapitalEditId(null);
-    setCapitalValue("");
-    setEditingId(a.id);
-    setEditName(a.name);
-  }
-
-  function startEditCapital(a: AccountRow) {
-    setEditingId(null);
-    setEditName("");
-    setCapitalEditId(a.id);
-    setCapitalValue(String(a.initialBalance));
-  }
-
-  function cancelCapitalEdit() {
-    setCapitalEditId(null);
-    setCapitalValue("");
-  }
-
-  function saveCapital(e: React.FormEvent) {
-    e.preventDefault();
-    if (capitalEditId === null) return;
     setError(null);
-    const n = parseFloat(capitalValue);
-    if (!Number.isFinite(n) || n <= 0) {
+    setEditAcct(a);
+    setEditForm({
+      name: a.name,
+      propfirmName: a.propfirmName ?? "",
+      initialBalance: String(a.initialBalance),
+    });
+  }
+
+  function closeEdit() {
+    setEditAcct(null);
+  }
+
+  function saveEditModal(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editAcct) return;
+    setError(null);
+    const a = editAcct;
+    const name = editForm.name.trim();
+    if (!name) {
+      setError("Name is required");
+      return;
+    }
+    const initialBalance = parseFloat(editForm.initialBalance);
+    if (!Number.isFinite(initialBalance) || initialBalance <= 0) {
       setError("Starting capital must be a positive number");
       return;
     }
+    const nextPropfirm = editForm.propfirmName || null;
+    const nameChanged = name !== a.name;
+    const propfirmChanged = nextPropfirm !== a.propfirmName;
+    const capitalChanged = Math.round(initialBalance) !== a.initialBalance;
+
     startTransition(async () => {
-      const r = await updateAccountInitialBalanceAction(capitalEditId, n);
-      if ("error" in r && r.error) {
-        setError(r.error);
-        return;
+      if (nameChanged) {
+        const r = await renameAccountAction(a.id, name);
+        if ("error" in r && r.error) {
+          setError(r.error);
+          return;
+        }
+      }
+      if (propfirmChanged) {
+        const r = await updateAccountDetailsAction(a.id, {
+          propfirmName: nextPropfirm,
+          description: a.description,
+          status: a.status,
+          numberOfAccounts: a.numberOfAccounts,
+          stage: a.stage,
+          cost: a.cost,
+          payout: a.payout,
+        });
+        if ("error" in r && r.error) {
+          setError(r.error);
+          return;
+        }
+      }
+      if (capitalChanged) {
+        const r = await updateAccountInitialBalanceAction(a.id, initialBalance);
+        if ("error" in r && r.error) {
+          setError(r.error);
+          return;
+        }
       }
       setAccounts((rows) =>
-        rows.map((x) => (x.id === capitalEditId ? { ...x, initialBalance: Math.round(n) } : x))
+        rows.map((x) =>
+          x.id === a.id
+            ? { ...x, name, propfirmName: nextPropfirm, initialBalance: Math.round(initialBalance) }
+            : x
+        )
       );
-      setCapitalEditId(null);
-      setCapitalValue("");
+      setEditAcct(null);
       refresh();
     });
   }
@@ -179,20 +229,23 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
   function toggleStage(a: AccountRow) {
     setError(null);
     const nextStage: AccountStage = a.stage === "Eval" ? "Funded" : "Eval";
+    // Funded accounts have no "Passed" phase — coerce it to Running when switching.
+    const nextStatus: AccountStatus = allowedStatuses(nextStage).includes(a.status) ? a.status : "Running";
     const payload = {
       propfirmName: a.propfirmName,
       description: a.description,
-      breached: a.breached,
+      status: nextStatus,
       numberOfAccounts: a.numberOfAccounts,
       stage: nextStage,
       cost: a.cost,
+      payout: a.payout,
     };
-    setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, stage: nextStage } : x)));
+    setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, stage: nextStage, status: nextStatus } : x)));
     startTransition(async () => {
       const r = await updateAccountDetailsAction(a.id, payload);
       if ("error" in r && r.error) {
         setError(r.error);
-        setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, stage: a.stage } : x)));
+        setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, stage: a.stage, status: a.status } : x)));
         return;
       }
       refresh();
@@ -206,10 +259,11 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
     const payload = {
       propfirmName: a.propfirmName,
       description: a.description,
-      breached: a.breached,
+      status: a.status,
       numberOfAccounts: next,
       stage: a.stage,
       cost: a.cost,
+      payout: a.payout,
     };
     setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, numberOfAccounts: next } : x)));
     startTransition(async () => {
@@ -223,46 +277,27 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
     });
   }
 
-  function setPropfirm(a: AccountRow, value: string) {
+  function cycleStatus(a: AccountRow) {
     setError(null);
-    const next = value || null;
-    const payload = {
-      propfirmName: next,
-      description: a.description,
-      breached: a.breached,
-      numberOfAccounts: a.numberOfAccounts,
-      stage: a.stage,
-      cost: a.cost,
-    };
-    setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, propfirmName: next } : x)));
-    startTransition(async () => {
-      const r = await updateAccountDetailsAction(a.id, payload);
-      if ("error" in r && r.error) {
-        setError(r.error);
-        setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, propfirmName: a.propfirmName } : x)));
-        return;
-      }
-      refresh();
-    });
-  }
-
-  function toggleBreached(a: AccountRow) {
-    setError(null);
-    const nextBreached = !a.breached;
+    const order = allowedStatuses(a.stage);
+    // Current status may not be in the type's order (e.g. legacy data); fall back to first.
+    const idx = order.indexOf(a.status);
+    const nextStatus = order[(idx + 1) % order.length];
     const payload = {
       propfirmName: a.propfirmName,
       description: a.description,
-      breached: nextBreached,
+      status: nextStatus,
       numberOfAccounts: a.numberOfAccounts,
       stage: a.stage,
       cost: a.cost,
+      payout: a.payout,
     };
-    setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, breached: nextBreached } : x)));
+    setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, status: nextStatus } : x)));
     startTransition(async () => {
       const r = await updateAccountDetailsAction(a.id, payload);
       if ("error" in r && r.error) {
         setError(r.error);
-        setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, breached: a.breached } : x)));
+        setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, status: a.status } : x)));
         return;
       }
       refresh();
@@ -285,10 +320,6 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
   }
 
   function startEditCost(a: AccountRow) {
-    setEditingId(null);
-    setEditName("");
-    setCapitalEditId(null);
-    setCapitalValue("");
     setCostEditId(a.id);
     setCostValue(String(a.cost));
   }
@@ -309,10 +340,11 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
     const payload = {
       propfirmName: a.propfirmName,
       description: a.description,
-      breached: a.breached,
+      status: a.status,
       numberOfAccounts: a.numberOfAccounts,
       stage: a.stage,
       cost: n,
+      payout: a.payout,
     };
     setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, cost: n } : x)));
     setCostEditId(null);
@@ -328,26 +360,43 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
     });
   }
 
-  function cancelEdit() {
-    setEditingId(null);
-    setEditName("");
+  function startEditPayout(a: AccountRow) {
+    setPayoutEditId(a.id);
+    setPayoutValue(String(a.payout));
   }
 
-  function saveEdit(e: React.FormEvent) {
+  function cancelPayoutEdit() {
+    setPayoutEditId(null);
+    setPayoutValue("");
+  }
+
+  function savePayout(a: AccountRow, e: React.FormEvent) {
     e.preventDefault();
-    if (editingId === null) return;
     setError(null);
-    const n = editName.trim();
-    if (!n) return;
+    const n = parseFloat(payoutValue);
+    if (!Number.isFinite(n) || n < 0) {
+      setError("Payout must be a non-negative number");
+      return;
+    }
+    const payload = {
+      propfirmName: a.propfirmName,
+      description: a.description,
+      status: a.status,
+      numberOfAccounts: a.numberOfAccounts,
+      stage: a.stage,
+      cost: a.cost,
+      payout: n,
+    };
+    setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, payout: n } : x)));
+    setPayoutEditId(null);
+    setPayoutValue("");
     startTransition(async () => {
-      const r = await renameAccountAction(editingId, n);
+      const r = await updateAccountDetailsAction(a.id, payload);
       if ("error" in r && r.error) {
         setError(r.error);
+        setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, payout: a.payout } : x)));
         return;
       }
-      setAccounts((rows) => rows.map((x) => (x.id === editingId ? { ...x, name: n } : x)));
-      setEditingId(null);
-      setEditName("");
       refresh();
     });
   }
@@ -389,17 +438,60 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
         </p>
       ) : null}
 
-      <div className="flex justify-end items-center gap-2">
-        <CsvUpload variant="inline" />
-        <button
-          type="button"
-          onClick={openAdd}
-          disabled={pending}
-          className="px-4 py-2 rounded-md text-sm font-medium"
-          style={{ background: "var(--accent)", color: "#000", opacity: pending ? 0.6 : 1 }}
-        >
-          + Add account
-        </button>
+      <div className="flex justify-between items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-4 text-sm" style={{ color: "var(--text-secondary)" }}>
+          <span>
+            Total cost:{" "}
+            <span className="font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
+              ${totalCost.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+            </span>
+          </span>
+          <span>
+            Total payout:{" "}
+            <span
+              className="font-semibold tabular-nums"
+              style={{ color: totalPayout > 0 ? "var(--profit)" : "var(--text-primary)" }}
+            >
+              ${totalPayout.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+            </span>
+          </span>
+        </div>
+        <div className="flex justify-end items-center gap-2">
+          {hiddenCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => setShowHidden((v) => !v)}
+              className="px-3 py-2 rounded-md text-sm font-medium"
+              style={{
+                background: "var(--bg-base)",
+                border: "1px solid var(--bg-border)",
+                color: "var(--text-secondary)",
+              }}
+              title={showHidden ? "Hide hidden accounts" : "Show hidden accounts"}
+            >
+              {showHidden ? "Hide hidden" : `Show hidden (${hiddenCount})`}
+            </button>
+          ) : null}
+          <CsvUpload
+            variant="inline"
+            accounts={accounts.map((a) => ({
+              id: a.id,
+              name: a.name,
+              initialBalance: a.initialBalance,
+              propfirmName: a.propfirmName,
+            }))}
+            defaultAccountId={activeId}
+          />
+          <button
+            type="button"
+            onClick={openAdd}
+            disabled={pending}
+            className="px-4 py-2 rounded-md text-sm font-medium"
+            style={{ background: "var(--accent)", color: "#000", opacity: pending ? 0.6 : 1 }}
+          >
+            + Add account
+          </button>
+        </div>
       </div>
 
       {addOpen ? (
@@ -476,16 +568,19 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
               Starting capital ($)
             </label>
-            <input
-              type="number"
-              min={1}
-              step="any"
+            <select
               required
               value={newAccount.initialBalance}
               onChange={(e) => setNewAccount((f) => ({ ...f, initialBalance: e.target.value }))}
               className="w-full px-3 py-2 rounded-md text-sm tabular-nums"
               style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
-            />
+            >
+              {CAPITAL_OPTIONS.map((c) => (
+                <option key={c} value={c}>
+                  ${c.toLocaleString("en-US")}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
@@ -565,13 +660,10 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
                 Account
               </th>
               <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
-                Prop firm
-              </th>
-              <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
-                Stage
+                Type
               </th>
               <th className="px-4 py-2 text-center text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
-                Breached
+                Status
               </th>
               <th className="px-4 py-2 text-center text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }} title="Include this account in cross-account calculations">
                 In stats
@@ -580,10 +672,10 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
                 # Accts
               </th>
               <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
-                Starting capital
+                Cost
               </th>
               <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
-                Cost
+                Payout
               </th>
               <th className="px-4 py-2 text-right text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
                 PnL
@@ -597,7 +689,7 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
             </tr>
           </thead>
           <tbody>
-            {accounts.map((a, i) => {
+            {visibleAccounts.map((a, i) => {
               const isActive = a.id === activeId;
               return (
                 <tr
@@ -613,100 +705,38 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
                     {a.id}
                   </td>
                   <td className="px-4 py-2">
-                    {editingId === a.id ? (
-                      <form onSubmit={saveEdit} className="flex flex-wrap gap-2 items-center">
-                        <input
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          maxLength={120}
-                          className="flex-1 min-w-[12rem] px-2 py-1 rounded text-sm"
-                          style={{
-                            background: "var(--bg-base)",
-                            border: "1px solid var(--bg-border)",
-                            color: "var(--text-primary)",
-                          }}
-                          autoFocus
-                        />
-                        <button
-                          type="submit"
-                          disabled={pending}
-                          className="text-sm px-2 py-1 rounded"
-                          style={{ background: "var(--accent)", color: "#000" }}
-                        >
-                          Save
-                        </button>
-                        <button type="button" onClick={cancelEdit} className="text-sm" style={{ color: "var(--text-muted)" }}>
-                          Cancel
-                        </button>
-                      </form>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5">
-                        {isActive ? (
-                          <span className="font-medium" style={{ color: "var(--text-primary)" }}>
-                            {a.name}
-                            <span
-                              className="ml-2 text-[10px] font-semibold uppercase align-middle"
-                              style={{ color: "var(--accent)" }}
-                            >
-                              active
-                            </span>
-                          </span>
-                        ) : a.hiddenFromStats ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      {isActive ? (
+                        <span className="font-medium" style={{ color: "var(--text-primary)" }}>
+                          {accountLabel(a)}
                           <span
-                            className="font-medium text-left"
-                            style={{ color: "var(--text-muted)" }}
-                            title="Hidden accounts can't be selected — set to Included first"
+                            className="ml-2 text-[10px] font-semibold uppercase align-middle"
+                            style={{ color: "var(--accent)" }}
                           >
-                            {a.name}
+                            active
                           </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleSwitch(a.id)}
-                            disabled={pending}
-                            className="font-medium text-left hover:underline"
-                            style={{ color: "var(--text-primary)" }}
-                            title="Switch to this account"
-                          >
-                            {a.name}
-                          </button>
-                        )}
+                        </span>
+                      ) : a.hiddenFromStats ? (
+                        <span
+                          className="font-medium text-left"
+                          style={{ color: "var(--text-muted)" }}
+                          title="Hidden accounts can't be selected — set to Included first"
+                        >
+                          {accountLabel(a)}
+                        </span>
+                      ) : (
                         <button
                           type="button"
-                          onClick={() => startEdit(a)}
+                          onClick={() => handleSwitch(a.id)}
                           disabled={pending}
-                          className="shrink-0 p-1 rounded hover:opacity-80 transition-opacity"
-                          style={{ color: "var(--text-muted)" }}
-                          title="Rename account"
-                          aria-label="Rename account"
+                          className="font-medium text-left hover:underline"
+                          style={{ color: "var(--text-primary)" }}
+                          title="Switch to this account"
                         >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 20h9" />
-                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                          </svg>
+                          {accountLabel(a)}
                         </button>
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2">
-                    <select
-                      value={a.propfirmName ?? ""}
-                      onChange={(e) => setPropfirm(a, e.target.value)}
-                      disabled={pending}
-                      className="px-2 py-1 rounded text-sm"
-                      style={{
-                        background: "var(--bg-base)",
-                        border: "1px solid var(--bg-border)",
-                        color: a.propfirmName ? "var(--text-secondary)" : "var(--text-muted)",
-                      }}
-                    >
-                      <option value="">—</option>
-                      {PROPFIRM_OPTIONS.map((firm) => (
-                        <option key={firm} value={firm}>
-                          {firm}
-                        </option>
-                      ))}
-                    </select>
+                      )}
+                    </span>
                   </td>
                   <td className="px-4 py-2">
                     <button
@@ -727,17 +757,19 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
                   <td className="px-4 py-2 text-center">
                     <button
                       type="button"
-                      onClick={() => toggleBreached(a)}
+                      onClick={() => cycleStatus(a)}
                       disabled={pending}
                       className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded hover:opacity-80 transition-opacity"
                       style={
-                        a.breached
+                        a.status === "Breached"
                           ? { background: "color-mix(in srgb, var(--loss) 15%, transparent)", color: "var(--loss)" }
-                          : { background: "var(--bg-border)", color: "var(--text-secondary)" }
+                          : a.status === "Passed"
+                          ? { background: "color-mix(in srgb, var(--profit) 15%, transparent)", color: "var(--profit)" }
+                          : { background: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)" }
                       }
-                      title={`Click to mark as ${a.breached ? "not breached" : "breached"}`}
+                      title={`Status: ${a.status}. Click to cycle ${allowedStatuses(a.stage).join(" → ")}`}
                     >
-                      {a.breached ? "Breached" : "OK"}
+                      {a.status}
                     </button>
                   </td>
                   <td className="px-4 py-2 text-center">
@@ -794,61 +826,6 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
                     </div>
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums">
-                    {capitalEditId === a.id ? (
-                      <form onSubmit={saveCapital} className="flex flex-wrap items-center justify-end gap-2">
-                        <input
-                          type="number"
-                          min={1}
-                          step="any"
-                          required
-                          value={capitalValue}
-                          onChange={(e) => setCapitalValue(e.target.value)}
-                          className="w-32 px-2 py-1 rounded text-sm text-right"
-                          style={{
-                            background: "var(--bg-base)",
-                            border: "1px solid var(--bg-border)",
-                            color: "var(--text-primary)",
-                          }}
-                          autoFocus
-                        />
-                        <button
-                          type="submit"
-                          disabled={pending}
-                          className="text-sm px-2 py-1 rounded"
-                          style={{ background: "var(--accent)", color: "#000" }}
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          onClick={cancelCapitalEdit}
-                          className="text-sm"
-                          style={{ color: "var(--text-muted)" }}
-                        >
-                          Cancel
-                        </button>
-                      </form>
-                    ) : (
-                      <span className="inline-flex items-center justify-end gap-1.5">
-                        ${a.initialBalance.toLocaleString("en-US", { maximumFractionDigits: 0 })}
-                        <button
-                          type="button"
-                          onClick={() => startEditCapital(a)}
-                          disabled={pending}
-                          className="shrink-0 p-1 rounded hover:opacity-80 transition-opacity"
-                          style={{ color: "var(--text-muted)" }}
-                          title="Edit starting capital"
-                          aria-label="Edit starting capital"
-                        >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 20h9" />
-                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                          </svg>
-                        </button>
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-right tabular-nums">
                     {costEditId === a.id ? (
                       <form onSubmit={(e) => saveCost(a, e)} className="flex flex-wrap items-center justify-end gap-2">
                         <input
@@ -903,19 +880,101 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
                       </span>
                     )}
                   </td>
+                  <td className="px-4 py-2 text-right tabular-nums">
+                    {payoutEditId === a.id ? (
+                      <form onSubmit={(e) => savePayout(a, e)} className="flex flex-wrap items-center justify-end gap-2">
+                        <input
+                          type="number"
+                          min={0}
+                          step="any"
+                          required
+                          value={payoutValue}
+                          onChange={(e) => setPayoutValue(e.target.value)}
+                          className="w-24 px-2 py-1 rounded text-sm text-right"
+                          style={{
+                            background: "var(--bg-base)",
+                            border: "1px solid var(--bg-border)",
+                            color: "var(--text-primary)",
+                          }}
+                          autoFocus
+                        />
+                        <button
+                          type="submit"
+                          disabled={pending}
+                          className="text-sm px-2 py-1 rounded"
+                          style={{ background: "var(--accent)", color: "#000" }}
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelPayoutEdit}
+                          className="text-sm"
+                          style={{ color: "var(--text-muted)" }}
+                        >
+                          Cancel
+                        </button>
+                      </form>
+                    ) : (
+                      <span
+                        className="inline-flex items-center justify-end gap-1.5"
+                        style={{ color: a.payout > 0 ? "var(--profit)" : "var(--text-primary)" }}
+                      >
+                        ${a.payout.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                        <button
+                          type="button"
+                          onClick={() => startEditPayout(a)}
+                          disabled={pending}
+                          className="shrink-0 p-1 rounded hover:opacity-80 transition-opacity"
+                          style={{ color: "var(--text-muted)" }}
+                          title="Edit payout"
+                          aria-label="Edit payout"
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                          </svg>
+                        </button>
+                      </span>
+                    )}
+                  </td>
                   <td
                     className="px-4 py-2 text-right tabular-nums font-medium"
-                    style={{ color: a.pnl >= 0 ? "var(--profit)" : "var(--loss)" }}
+                    style={{
+                      color: a.tradeCount === 0 ? "var(--text-muted)" : a.pnl >= 0 ? "var(--profit)" : "var(--loss)",
+                    }}
                   >
-                    {a.pnl >= 0 ? "+" : "-"}$
-                    {Math.abs(a.pnl).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {a.tradeCount === 0 ? (
+                      "No trades"
+                    ) : (
+                      <>
+                        {a.pnl >= 0 ? "+" : "-"}$
+                        {Math.abs(a.pnl).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums" style={{ color: "var(--text-secondary)" }}>
                     {a.tradeCount}
                   </td>
                   <td className="px-4 py-2">
-                    {editingId === a.id ? null : (
-                      <div className="flex flex-wrap gap-2 justify-end">
+                    <div className="flex flex-nowrap gap-2 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(a)}
+                          disabled={pending}
+                          className="p-1.5 rounded-md hover:opacity-80 transition-opacity"
+                          style={{
+                            color: "var(--text-secondary)",
+                            border: "1px solid var(--bg-border)",
+                          }}
+                          title="Edit account (name, prop firm, starting capital)"
+                          aria-label="Edit account"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                          </svg>
+                        </button>
                         <a
                           href={`/api/account-report?accountId=${a.id}`}
                           className="p-1.5 rounded-md hover:opacity-80 transition-opacity inline-flex"
@@ -923,7 +982,7 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
                             color: "var(--text-secondary)",
                             border: "1px solid var(--bg-border)",
                           }}
-                          title={`Export PDF report for “${a.name}”`}
+                          title={`Export PDF report for “${accountLabel(a)}”`}
                           aria-label="Export PDF report"
                         >
                           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -952,8 +1011,7 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
                             <path d="M10 11v6M14 11v6" />
                           </svg>
                         </button>
-                      </div>
-                    )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -961,6 +1019,110 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
           </tbody>
         </table>
       </div>
+
+      {editAcct ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "color-mix(in srgb, #000 45%, transparent)" }}
+          onClick={closeEdit}
+        >
+          <form
+            onSubmit={saveEditModal}
+            className="w-full max-w-md rounded-lg p-5 space-y-4"
+            style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+              Edit account
+            </h2>
+            {error ? (
+              <p
+                className="text-sm rounded-md px-3 py-2"
+                style={{ background: "color-mix(in srgb, var(--loss) 12%, var(--bg-card))", color: "var(--loss)" }}
+              >
+                {error}
+              </p>
+            ) : null}
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+                Name
+              </label>
+              <input
+                value={editForm.name}
+                onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                maxLength={120}
+                required
+                autoFocus
+                className="w-full px-3 py-2 rounded-md text-sm"
+                style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+                Prop firm
+              </label>
+              <select
+                value={editForm.propfirmName}
+                onChange={(e) => setEditForm((f) => ({ ...f, propfirmName: e.target.value }))}
+                className="w-full px-3 py-2 rounded-md text-sm"
+                style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
+              >
+                <option value="">—</option>
+                {PROPFIRM_OPTIONS.map((firm) => (
+                  <option key={firm} value={firm}>
+                    {firm}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+                Starting capital ($)
+              </label>
+              <select
+                required
+                value={editForm.initialBalance}
+                onChange={(e) => setEditForm((f) => ({ ...f, initialBalance: e.target.value }))}
+                className="w-full px-3 py-2 rounded-md text-sm tabular-nums"
+                style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
+              >
+                {CAPITAL_OPTIONS.map((c) => (
+                  <option key={c} value={c}>
+                    ${c.toLocaleString("en-US")}
+                  </option>
+                ))}
+                {!CAPITAL_OPTIONS.includes(Number(editForm.initialBalance) as (typeof CAPITAL_OPTIONS)[number]) &&
+                editForm.initialBalance ? (
+                  <option value={editForm.initialBalance}>
+                    ${Number(editForm.initialBalance).toLocaleString("en-US")}
+                  </option>
+                ) : null}
+              </select>
+              <p className="mt-1 text-[11px]" style={{ color: "var(--text-muted)" }}>
+                Changing starting capital recomputes the equity curve and per-trade capital.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeEdit}
+                className="text-sm px-3 py-1.5 rounded-md"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={pending || !editForm.name.trim()}
+                className="px-4 py-2 rounded-md text-sm font-medium"
+                style={{ background: "var(--accent)", color: "#000", opacity: pending || !editForm.name.trim() ? 0.6 : 1 }}
+              >
+                {pending ? "…" : "Save changes"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
 
       {deleting ? (
         <div
@@ -974,7 +1136,7 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-base font-semibold" style={{ color: "var(--loss)" }}>
-              Delete “{deleting.name}”?
+              Delete “{accountLabel(deleting)}”?
             </h2>
             <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
               This will <strong>permanently</strong> remove <strong>all {deleting.tradeCount} trade(s)</strong>, scores, and

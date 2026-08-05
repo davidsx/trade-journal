@@ -5,6 +5,7 @@ import { AccountReportDocument } from "@/lib/pdf/AccountReportDocument";
 import { buildAccountReportPayload } from "@/lib/pdf/buildAccountReportPayload";
 import { getActiveAccountId } from "@/lib/activeAccount";
 import { prisma } from "@/lib/db/prisma";
+import { accountLabel } from "@/lib/accountLabel";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
   );
   const day = new Date().toISOString().slice(0, 10);
   const safe =
-    account.name
+    accountLabel(account)
       .replace(/[^\w\-. ()]+/g, "-")
       .replace(/\s+/g, " ")
       .trim()

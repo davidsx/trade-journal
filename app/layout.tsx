@@ -24,7 +24,7 @@ export default async function RootLayout({
     prisma.account.findMany({
       where: { hiddenFromStats: false },
       orderBy: { id: "asc" },
-      select: { id: true, name: true },
+      select: { id: true, name: true, propfirmName: true, initialBalance: true },
     }),
   ]);
   return (

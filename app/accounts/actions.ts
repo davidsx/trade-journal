@@ -113,10 +113,11 @@ export async function deleteAccountAction(accountId: number) {
 export type AccountDetailsInput = {
   propfirmName: string | null;
   description: string | null;
-  breached: boolean;
+  status: "Running" | "Passed" | "Breached";
   numberOfAccounts: number;
   stage: "Eval" | "Funded";
   cost: number;
+  payout: number;
 };
 
 export async function updateAccountDetailsAction(accountId: number, details: AccountDetailsInput) {
@@ -131,8 +132,14 @@ export async function updateAccountDetailsAction(accountId: number, details: Acc
     return { error: "Number of accounts must be a positive whole number" };
   }
   if (details.stage !== "Eval" && details.stage !== "Funded") return { error: "Invalid stage" };
+  if (details.status !== "Running" && details.status !== "Passed" && details.status !== "Breached") {
+    return { error: "Invalid status" };
+  }
   if (!Number.isFinite(details.cost) || details.cost < 0) {
     return { error: "Cost must be a non-negative number" };
+  }
+  if (!Number.isFinite(details.payout) || details.payout < 0) {
+    return { error: "Payout must be a non-negative number" };
   }
 
   await prisma.account.update({
@@ -140,10 +147,11 @@ export async function updateAccountDetailsAction(accountId: number, details: Acc
     data: {
       propfirmName,
       description,
-      breached: details.breached,
+      status: details.status,
       numberOfAccounts: details.numberOfAccounts,
       stage: details.stage,
       cost: details.cost,
+      payout: details.payout,
     },
   });
   revalidateAll();

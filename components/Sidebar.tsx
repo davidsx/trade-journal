@@ -53,7 +53,7 @@ const NAV = [
 
 type SidebarProps = {
   activeAccount: { id: number; name: string };
-  accounts: { id: number; name: string }[];
+  accounts: { id: number; name: string; propfirmName: string | null; initialBalance: number }[];
 };
 
 export default function Sidebar({ activeAccount, accounts }: SidebarProps) {

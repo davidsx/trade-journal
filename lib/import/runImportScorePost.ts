@@ -9,6 +9,7 @@ type ScoreBody = {
   rowsInCsv?: number;
   symbol?: string;
   replacedCount?: number;
+  accountId?: number;
 };
 
 export async function runImportScorePost(req: NextRequest): Promise<NextResponse> {
@@ -20,10 +21,14 @@ export async function runImportScorePost(req: NextRequest): Promise<NextResponse
     body = {};
   }
 
-  await warmCandleCacheForScoring(req.nextUrl.origin);
-  await finalizeCsvAccountScoring();
+  const accountId =
+    typeof body.accountId === "number" && body.accountId > 0
+      ? body.accountId
+      : await getActiveAccountId();
 
-  const accountId = await getActiveAccountId();
+  await warmCandleCacheForScoring(req.nextUrl.origin);
+  await finalizeCsvAccountScoring(undefined, accountId);
+
   const totalTrades = await prisma.trade.count({ where: tradesWhere(accountId) });
 
   const rowsInCsv = body.rowsInCsv;

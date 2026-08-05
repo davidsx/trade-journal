@@ -59,8 +59,8 @@ export function coreFromImported(t: ImportedTrade) {
   };
 }
 
-export async function upsertOneImportedTrade(t: ImportedTrade): Promise<void> {
-  const accountId = await getActiveAccountId();
+export async function upsertOneImportedTrade(t: ImportedTrade, accountIdOverride?: number): Promise<void> {
+  const accountId = accountIdOverride ?? (await getActiveAccountId());
   const core = { ...coreFromImported(t), accountId };
   await prisma.trade.upsert({
     where: { id: t.id },

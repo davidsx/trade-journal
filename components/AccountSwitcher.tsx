@@ -4,10 +4,11 @@ import type { SVGProps } from "react";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { switchAccountAction } from "@/app/accounts/actions";
+import { accountLabel } from "@/lib/accountLabel";
 
 type Props = {
   activeId: number;
-  accounts: { id: number; name: string }[];
+  accounts: { id: number; name: string; propfirmName: string | null; initialBalance: number }[];
   compact: boolean;
 };
 
@@ -108,11 +109,14 @@ export default function AccountSwitcher({ activeId, accounts, compact }: Props) 
             boxSizing: "border-box",
           }}
         >
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {compact ? (a.name.length > 12 ? `${a.name.slice(0, 11)}…` : a.name) : a.name}
-            </option>
-          ))}
+          {accounts.map((a) => {
+            const label = accountLabel(a);
+            return (
+              <option key={a.id} value={a.id}>
+                {compact ? (label.length > 12 ? `${label.slice(0, 11)}…` : label) : label}
+              </option>
+            );
+          })}
         </select>
         <div
           className="pointer-events-none absolute right-0 top-0 z-10 flex h-9 w-7 select-none items-center justify-center"

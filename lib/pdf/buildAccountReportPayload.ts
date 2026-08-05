@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { tradesWhere } from "@/lib/accountScope";
+import { accountLabel } from "@/lib/accountLabel";
 import { computeSummaryMetrics, type MetricsSummary } from "@/lib/analytics/metrics";
 import {
   analyzeTimeOfDay,
@@ -175,7 +176,7 @@ export async function buildAccountReportPayload(accountId: number): Promise<Acco
     generatedAt: new Date().toISOString(),
     account: {
       id: account.id,
-      name: account.name,
+      name: accountLabel(account),
       initialBalance: account.initialBalance,
     },
     metrics,

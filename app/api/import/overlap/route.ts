@@ -9,7 +9,7 @@ export const maxDuration = 60;
 
 const MAX_IDS = 50_000;
 
-type Body = { csvIds: string[] };
+type Body = { csvIds: string[]; accountId?: number };
 
 /** Count how many of the given trade ids already exist (call once before parallel upserts). */
 export async function POST(req: NextRequest) {
@@ -23,7 +23,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `At most ${MAX_IDS} ids` }, { status: 400 });
     }
 
-    const accountId = await getActiveAccountId();
+    const accountId =
+      typeof body.accountId === "number" && body.accountId > 0
+        ? body.accountId
+        : await getActiveAccountId();
     const replacedCount = await prisma.trade.count({
       where: tradesWhere(accountId, { id: { in: csvIds } }),
     });

@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseCsv, csvRowsToTrades } from "@/lib/csv/parser";
 import { importedTradeToWire } from "@/lib/csv/importWire";
 import { DEFAULT_INITIAL_BALANCE } from "@/lib/accountConstants";
+import { accountLabel } from "@/lib/accountLabel";
 
 /** Parallel in-flight upserts (browser + server; avoid opening hundreds of connections). */
 const UPSERT_CONCURRENCY = 16;
@@ -24,16 +25,35 @@ async function runPool<T>(items: T[], concurrency: number, fn: (item: T) => Prom
   );
 }
 
+/** Account choices for the import destination selector. */
+export type CsvUploadAccount = {
+  id: number;
+  name: string;
+  initialBalance: number;
+  propfirmName: string | null;
+};
+
 type CsvUploadProps = {
   /** "sidebar" (default): full-width trigger pinned to the bottom. "inline": compact button for toolbars. */
   variant?: "sidebar" | "inline";
+  /** Selectable import destinations. If omitted, imports target the active account. */
+  accounts?: CsvUploadAccount[];
+  /** Which account to preselect (typically the active one). */
+  defaultAccountId?: number;
 };
 
-export default function CsvUpload({ variant = "sidebar" }: CsvUploadProps) {
+export default function CsvUpload({ variant = "sidebar", accounts, defaultAccountId }: CsvUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const canChoose = Array.isArray(accounts) && accounts.length > 0;
+  const [targetId, setTargetId] = useState<number | null>(
+    defaultAccountId ?? accounts?.[0]?.id ?? null
+  );
+  useEffect(() => {
+    if (defaultAccountId != null) setTargetId(defaultAccountId);
+  }, [defaultAccountId]);
   const router = useRouter();
 
   async function handleFile(file: File) {
@@ -49,17 +69,27 @@ export default function CsvUpload({ variant = "sidebar" }: CsvUploadProps) {
     try {
       const text = await file.text();
       const rows = parseCsv(text);
-      const settingsRes = await fetch("/api/settings");
-      const settings = (await settingsRes.json()) as {
-        initialBalance?: number;
-        accountId?: number;
-      };
-      const initialBalance =
-        typeof settings.initialBalance === "number" && settings.initialBalance > 0
-          ? settings.initialBalance
-          : DEFAULT_INITIAL_BALANCE;
-      const accountId =
-        typeof settings.accountId === "number" && settings.accountId > 0 ? settings.accountId : 1;
+
+      // Prefer an explicitly chosen destination; otherwise fall back to the active account.
+      const chosen = canChoose ? accounts!.find((a) => a.id === targetId) : undefined;
+      let initialBalance: number;
+      let accountId: number;
+      if (chosen) {
+        initialBalance = chosen.initialBalance > 0 ? chosen.initialBalance : DEFAULT_INITIAL_BALANCE;
+        accountId = chosen.id;
+      } else {
+        const settingsRes = await fetch("/api/settings");
+        const settings = (await settingsRes.json()) as {
+          initialBalance?: number;
+          accountId?: number;
+        };
+        initialBalance =
+          typeof settings.initialBalance === "number" && settings.initialBalance > 0
+            ? settings.initialBalance
+            : DEFAULT_INITIAL_BALANCE;
+        accountId =
+          typeof settings.accountId === "number" && settings.accountId > 0 ? settings.accountId : 1;
+      }
       const trades = csvRowsToTrades(rows, accountId, initialBalance);
       const total = trades.length;
 
@@ -67,7 +97,7 @@ export default function CsvUpload({ variant = "sidebar" }: CsvUploadProps) {
       const overlapRes = await fetch("/api/import/overlap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ csvIds: trades.map((t) => t.id) }),
+        body: JSON.stringify({ csvIds: trades.map((t) => t.id), accountId }),
       });
       const overlapData = await overlapRes.json();
       if (!overlapRes.ok) throw new Error(overlapData.error ?? "Overlap query failed");
@@ -78,7 +108,7 @@ export default function CsvUpload({ variant = "sidebar" }: CsvUploadProps) {
         const res = await fetch("/api/import/trade", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ trade: importedTradeToWire(t) }),
+          body: JSON.stringify({ trade: importedTradeToWire(t), accountId }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Upsert failed");
@@ -96,6 +126,7 @@ export default function CsvUpload({ variant = "sidebar" }: CsvUploadProps) {
           rowsInCsv: total,
           symbol: trades[0]?.contractName,
           replacedCount,
+          accountId,
         }),
       });
       const data = await finRes.json();
@@ -214,9 +245,36 @@ export default function CsvUpload({ variant = "sidebar" }: CsvUploadProps) {
               style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-secondary)" }}
             >
               Use your broker’s <strong>Performance / P&amp;L export</strong>: a tabular CSV with fills, prices, and
-              timestamps. Rows are matched into round-trip trades, scored, and merged into the active account —
-              re-importing an overlapping range replaces those trades rather than duplicating them.
+              timestamps. Rows are matched into round-trip trades, scored, and merged into the{" "}
+              {canChoose ? "selected account" : "active account"} — re-importing an overlapping range replaces those
+              trades rather than duplicating them.
             </div>
+
+            {canChoose && (
+              <div>
+                <label
+                  htmlFor="csv-import-account"
+                  className="block text-xs font-medium mb-1"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Import into account
+                </label>
+                <select
+                  id="csv-import-account"
+                  value={targetId ?? ""}
+                  onChange={(e) => setTargetId(Number(e.target.value))}
+                  disabled={isLoading}
+                  className="w-full px-3 py-2 rounded-md text-sm"
+                  style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
+                >
+                  {accounts!.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {accountLabel(a)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Drop zone / file picker */}
             <button

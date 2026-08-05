@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 /** Single-row upsert — cheap request for parallel client calls. */
 export const maxDuration = 30;
 
-type Body = { trade: ImportedTradeWire };
+type Body = { trade: ImportedTradeWire; accountId?: number };
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,8 +17,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "trade object required" }, { status: 400 });
     }
 
+    const accountId =
+      typeof body.accountId === "number" && body.accountId > 0 ? body.accountId : undefined;
     const parsed = wireToImportedTrade(body.trade);
-    await upsertOneImportedTrade(parsed);
+    await upsertOneImportedTrade(parsed, accountId);
 
     return NextResponse.json({ ok: true });
   } catch (err) {

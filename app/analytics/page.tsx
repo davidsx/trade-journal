@@ -10,6 +10,7 @@ import {
   scoreMetricsBySession,
 } from "@/lib/analytics/scoreTimeMetrics";
 import { getAccountSettings } from "@/lib/accountSettings";
+import EquityCurve from "@/components/EquityCurve";
 import DrawdownChart from "@/components/DrawdownChart";
 import PnlBarChart from "@/components/PnlBarChart";
 import ScoreDistributionChart from "@/components/ScoreDistributionChart";
@@ -74,7 +75,7 @@ export default async function AnalyticsPage() {
     <div className="space-y-6">
       <h1 className="text-xl font-semibold">Analytics</h1>
 
-      {/* Summary stats — P&L, execution, and quality (see home for Sharpe / Sortino) */}
+      {/* Summary stats — P&L, execution, quality, and risk-adjusted returns */}
       <div
         className="rounded-lg p-4 grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm"
         style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
@@ -167,6 +168,45 @@ export default async function AnalyticsPage() {
             {metrics.totalTrades === 0 ? "—" : formatAvgHoldMins(metrics.avgHoldingMins)}
           </div>
         </div>
+        <div>
+          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
+            Sharpe ratio
+          </div>
+          <div
+            className="font-semibold text-lg tabular-nums"
+            style={{
+              color:
+                metrics.totalTrades === 0
+                  ? "var(--text-primary)"
+                  : metrics.sharpeRatio >= 1
+                  ? "var(--profit)"
+                  : metrics.sharpeRatio >= 0
+                  ? "var(--warn)"
+                  : "var(--loss)",
+            }}
+          >
+            {metrics.totalTrades === 0 ? "—" : metrics.sharpeRatio.toFixed(2)}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
+            Sortino ratio
+          </div>
+          <div className="font-semibold text-lg tabular-nums" style={{ color: "var(--text-primary)" }}>
+            {metrics.totalTrades === 0 ? "—" : metrics.sortinoRatio.toFixed(2)}
+          </div>
+        </div>
+      </div>
+
+      {/* Equity curve */}
+      <div
+        className="rounded-lg p-4"
+        style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
+      >
+        <h2 className="text-sm font-medium mb-3" style={{ color: "var(--text-secondary)" }}>
+          Equity Curve
+        </h2>
+        <EquityCurve data={metrics.equityCurve} startingCapital={metrics.startingCapital} />
       </div>
 
       {/* Drawdown */}

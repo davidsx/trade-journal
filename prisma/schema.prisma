@@ -12,6 +12,12 @@ enum Stage {
   Funded
 }
 
+enum AccountStatus {
+  Running
+  Passed
+  Breached
+}
+
 /** Prop / SIM / cleared account; starting capital lives only on this row. */
 model Account {
   id              Int      @id @default(autoincrement())
@@ -20,14 +26,16 @@ model Account {
   propfirmName    String?
   /** Free-form notes about the account. */
   description     String?
-  /** Whether the account has been breached / blown. */
-  breached        Boolean  @default(false)
+  /** Lifecycle status: Running (active), Passed (eval cleared / payout stage), or Breached / blown. */
+  status          AccountStatus @default(Running)
   /** How many live accounts this row represents (copy trading). */
   numberOfAccounts Int     @default(1)
   /** Eval vs Funded phase. */
   stage           Stage    @default(Eval)
   /** Purchase / eval cost paid for this account (USD). */
   cost            Float    @default(0)
+  /** Total payouts received from this account (USD). */
+  payout          Float    @default(0)
   /** Exclude this account from cross-account calculations (still switchable individually). */
   hiddenFromStats Boolean  @default(false)
   /** Starting account size for equity curve, capital chain, and CSV import (single source per account). */

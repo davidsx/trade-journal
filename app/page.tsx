@@ -33,12 +33,15 @@ export default async function DashboardPage() {
     prisma.trade.groupBy({ by: ["accountId"], _sum: { netPnl: true } }),
   ]);
   const pnlMap = new Map(pnlByAccount.map((g) => [g.accountId, g._sum.netPnl ?? 0]));
-  const importAccounts = statusAccounts.map((a) => ({
-    id: a.id,
-    name: a.name,
-    initialBalance: a.initialBalance,
-    propfirmName: a.propfirmName,
-  }));
+  // Import destinations: hidden accounts are already excluded above; also drop breached ones.
+  const importAccounts = statusAccounts
+    .filter((a) => a.status !== "Breached")
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      initialBalance: a.initialBalance,
+      propfirmName: a.propfirmName,
+    }));
   // Passed evals are cleared/awaiting funding — exclude from status metrics (but not economics).
   const statusRows = statusAccounts
     .filter((a) => a.status !== "Passed")

@@ -204,10 +204,13 @@ const HOUR_RANK_WEIGHTS = [3, 2, 1] as const;
 type HourlyTradeLike = { entryTime: Date; netPnl: number };
 
 /**
- * Across accounts, rank each account's top 3 P&L hours, then tally a weighted
- * vote per hour (#1=3, #2=2, #3=1). Returned sorted by weighted score desc.
+ * Full cross-account hour ranking: every hour that has trades in any account,
+ * ranked best → worst. Each account still casts a weighted top-3 P&L vote
+ * (#1=3, #2=2, #3=1) to order the leaders, but *all* traded hours are included
+ * — combined P&L and appearances tally for every hour. Sorted by weighted score
+ * desc, then combined P&L desc, so the most-negative hours land at the tail.
  */
-export function rankTopHoursAcrossAccounts(tradesByAccount: HourlyTradeLike[][]): HourRankTally[] {
+export function rankAllHoursAcrossAccounts(tradesByAccount: HourlyTradeLike[][]): HourRankTally[] {
   type Tally = {
     weightedScore: number;
     firsts: number;
@@ -217,31 +220,38 @@ export function rankTopHoursAcrossAccounts(tradesByAccount: HourlyTradeLike[][])
     totalPnl: number;
   };
   const tallies = new Map<number, Tally>();
+  const get = (hour: number): Tally => {
+    let t = tallies.get(hour);
+    if (!t) {
+      t = { weightedScore: 0, firsts: 0, seconds: 0, thirds: 0, appearances: 0, totalPnl: 0 };
+      tallies.set(hour, t);
+    }
+    return t;
+  };
 
   for (const trades of tradesByAccount) {
     if (trades.length === 0) continue;
-    const top3 = analyzeHourly(trades)
-      .filter((b) => b.tradeCount > 0 && b.totalPnl > 0)
-      .sort((a, b) => b.totalPnl - a.totalPnl)
-      .slice(0, 3);
+    const hours = analyzeHourly(trades).filter((b) => b.tradeCount > 0);
 
-    top3.forEach((bucket, i) => {
-      const t = tallies.get(bucket.hour) ?? {
-        weightedScore: 0,
-        firsts: 0,
-        seconds: 0,
-        thirds: 0,
-        appearances: 0,
-        totalPnl: 0,
-      };
-      t.weightedScore += HOUR_RANK_WEIGHTS[i];
-      if (i === 0) t.firsts++;
-      else if (i === 1) t.seconds++;
-      else t.thirds++;
+    // Tally every traded hour's combined P&L + how many accounts traded it.
+    for (const b of hours) {
+      const t = get(b.hour);
       t.appearances++;
-      t.totalPnl += bucket.totalPnl;
-      tallies.set(bucket.hour, t);
-    });
+      t.totalPnl += b.totalPnl;
+    }
+
+    // Weighted vote on this account's 3 best profitable hours.
+    hours
+      .filter((b) => b.totalPnl > 0)
+      .sort((a, b) => b.totalPnl - a.totalPnl)
+      .slice(0, 3)
+      .forEach((b, i) => {
+        const t = get(b.hour);
+        t.weightedScore += HOUR_RANK_WEIGHTS[i];
+        if (i === 0) t.firsts++;
+        else if (i === 1) t.seconds++;
+        else t.thirds++;
+      });
   }
 
   return [...tallies.entries()]
@@ -330,7 +340,7 @@ export function analyzeDayOfWeek(trades: Trade[]): DayOfWeekBucket[] {
   const buckets = new Map<number, { wins: number; total: number; pnlSum: number }>();
 
   for (const t of trades) {
-    const day = tradingDayWeekdayIndexHkt(t.exitTime);
+    const day = tradingDayWeekdayIndexHkt(t.entryTime);
     const b = buckets.get(day) ?? { wins: 0, total: 0, pnlSum: 0 };
     b.total++;
     if (t.netPnl > 0) b.wins++;

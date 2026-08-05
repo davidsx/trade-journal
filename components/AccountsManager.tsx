@@ -474,12 +474,14 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
           ) : null}
           <CsvUpload
             variant="inline"
-            accounts={accounts.map((a) => ({
-              id: a.id,
-              name: a.name,
-              initialBalance: a.initialBalance,
-              propfirmName: a.propfirmName,
-            }))}
+            accounts={accounts
+              .filter((a) => !a.hiddenFromStats && a.status !== "Breached")
+              .map((a) => ({
+                id: a.id,
+                name: a.name,
+                initialBalance: a.initialBalance,
+                propfirmName: a.propfirmName,
+              }))}
             defaultAccountId={activeId}
           />
           <button

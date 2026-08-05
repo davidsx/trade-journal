@@ -133,27 +133,17 @@ export default function CsvUpload({ variant = "sidebar", accounts, defaultAccoun
       if (!finRes.ok) throw new Error(data.error ?? "Scoring failed");
 
       setStatus("done");
-      const parts: string[] = [];
-      if (typeof data.addedFromCsv === "number" && typeof data.updatedFromCsv === "number") {
-        parts.push(`${data.addedFromCsv} new, ${data.updatedFromCsv} updated from CSV`);
-      } else {
-        parts.push(`${data.imported ?? total} rows in file`);
-      }
-      if (typeof data.totalTrades === "number") {
-        parts.push(`${data.totalTrades} total in account`);
-      }
-      if (data.symbol) parts.push(String(data.symbol));
-      setMessage(parts.join(" · "));
+      setMessage(null);
+      setOpen(false);
       router.refresh();
     } catch (e) {
       setStatus("error");
       setMessage(e instanceof Error ? e.message : "Error");
+      setTimeout(() => {
+        setStatus("idle");
+        setMessage(null);
+      }, 6000);
     }
-
-    setTimeout(() => {
-      setStatus("idle");
-      setMessage(null);
-    }, 6000);
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -199,18 +189,6 @@ export default function CsvUpload({ variant = "sidebar", accounts, defaultAccoun
         >
           Import CSV
         </button>
-      )}
-
-      {/* Compact status echo (when modal closed) while an import runs */}
-      {message && !open && (
-        <p
-          className="mt-2 text-xs text-center px-1"
-          style={{
-            color: status === "error" ? "var(--loss)" : status === "done" ? "var(--profit)" : "var(--text-muted)",
-          }}
-        >
-          {message}
-        </p>
       )}
 
       {open && (

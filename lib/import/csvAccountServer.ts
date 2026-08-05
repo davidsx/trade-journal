@@ -59,8 +59,24 @@ export function coreFromImported(t: ImportedTrade) {
   };
 }
 
-export async function upsertOneImportedTrade(t: ImportedTrade, accountIdOverride?: number): Promise<void> {
+/**
+ * Resolve + validate a CSV import destination. Rejects hidden or breached accounts
+ * (matches the UI, which hides them from the destination picker). Throws on invalid target.
+ */
+export async function resolveImportAccountId(accountIdOverride?: number): Promise<number> {
   const accountId = accountIdOverride ?? (await getActiveAccountId());
+  const acc = await prisma.account.findUnique({
+    where: { id: accountId },
+    select: { id: true, hiddenFromStats: true, status: true },
+  });
+  if (!acc) throw new Error("Import account not found");
+  if (acc.hiddenFromStats) throw new Error("Cannot import into a hidden account");
+  if (acc.status === "Breached") throw new Error("Cannot import into a breached account");
+  return acc.id;
+}
+
+export async function upsertOneImportedTrade(t: ImportedTrade, accountIdOverride?: number): Promise<void> {
+  const accountId = await resolveImportAccountId(accountIdOverride);
   const core = { ...coreFromImported(t), accountId };
   await prisma.trade.upsert({
     where: { id: t.id },

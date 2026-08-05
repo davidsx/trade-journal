@@ -3,6 +3,7 @@ import {
   type ScoreTimeRow,
   pickBestByAvgPnl,
   pickBestByAvgScore,
+  pickWorstByAvgPnl,
 } from "@/lib/analytics/scoreTimeMetrics";
 
 function fmtPnl(n: number) {
@@ -58,11 +59,14 @@ function formatPnlBestCallout(r: ScoreTimeRow | null): { title: string; detail: 
   };
 }
 
+const formatPnlWorstCallout = formatPnlBestCallout;
+
 function MetricsTable({
   rows,
   dense,
   bestByScore,
   bestByPnl,
+  worstByPnl,
   fillHeight,
   firstColumnLabel = "When",
 }: {
@@ -70,12 +74,15 @@ function MetricsTable({
   dense?: boolean;
   bestByScore: ScoreTimeRow | null;
   bestByPnl: ScoreTimeRow | null;
+  worstByPnl?: ScoreTimeRow | null;
   fillHeight?: boolean;
   /** Column header for the first column (default “When”). */
   firstColumnLabel?: string;
 }) {
   const scoreKey = bestByScore ? rowKey(bestByScore) : null;
   const pnlKey = bestByPnl ? rowKey(bestByPnl) : null;
+  // Don't flag a "worst" when it's the same bucket as the best P&L (single-bucket / all-positive edge case).
+  const worstKey = worstByPnl && (!bestByPnl || rowKey(worstByPnl) !== rowKey(bestByPnl)) ? rowKey(worstByPnl) : null;
   const scrollClass = dense
     ? fillHeight
       ? "h-full min-h-0 overflow-x-auto overflow-y-auto"
@@ -104,6 +111,7 @@ function MetricsTable({
           {rows.map((r) => {
             const byScore = scoreKey !== null && rowKey(r) === scoreKey;
             const byPnl = pnlKey !== null && rowKey(r) === pnlKey;
+            const byWorst = worstKey !== null && rowKey(r) === worstKey;
             const highlight =
               byScore && byPnl
                 ? "color-mix(in srgb, var(--accent) 6%, color-mix(in srgb, var(--profit) 8%, var(--bg-card)))"
@@ -111,11 +119,15 @@ function MetricsTable({
                   ? "color-mix(in srgb, var(--accent) 10%, var(--bg-card))"
                   : byPnl
                     ? "color-mix(in srgb, var(--profit) 10%, var(--bg-card))"
-                    : undefined;
+                    : byWorst
+                      ? "color-mix(in srgb, var(--loss) 10%, var(--bg-card))"
+                      : undefined;
             const edge =
               byScore || byPnl
                 ? `inset 3px 0 0 0 ${byScore ? "var(--accent)" : "var(--profit)"}`
-                : undefined;
+                : byWorst
+                  ? "inset 3px 0 0 0 var(--loss)"
+                  : undefined;
             return (
             <tr
               key={`${r.label}-${r.sublabel ?? ""}`}
@@ -143,6 +155,14 @@ function MetricsTable({
                       style={{ color: "var(--profit)" }}
                     >
                       top P&amp;L
+                    </span>
+                  ) : null}
+                  {byWorst ? (
+                    <span
+                      className="ml-1.5 text-[10px] font-semibold uppercase align-middle"
+                      style={{ color: "var(--loss)" }}
+                    >
+                      worst P&amp;L
                     </span>
                   ) : null}
                 </div>
@@ -197,14 +217,12 @@ function BestPanel({
 }: {
   title: string;
   hint: string;
-  variant: "score" | "pnl";
+  variant: "score" | "pnl" | "loss";
   children: ReactNode;
 }) {
-  const accent = variant === "score" ? "var(--accent)" : "var(--profit)";
-  const bg =
-    variant === "score"
-      ? "color-mix(in srgb, var(--accent) 8%, var(--bg-card))"
-      : "color-mix(in srgb, var(--profit) 8%, var(--bg-card))";
+  const accent =
+    variant === "score" ? "var(--accent)" : variant === "pnl" ? "var(--profit)" : "var(--loss)";
+  const bg = `color-mix(in srgb, ${accent} 8%, var(--bg-card))`;
   return (
     <div
       className="rounded-lg p-3 text-sm"
@@ -232,22 +250,30 @@ function BestPanel({
 function BestStrips({
   bestSessionByScore,
   bestSessionByPnl,
+  worstSessionByPnl,
   bestHourByScore,
   bestHourByPnl,
+  worstHourByPnl,
   bestWeekdayByScore,
   bestWeekdayByPnl,
+  worstWeekdayByPnl,
   bestHoldByScore,
   bestHoldByPnl,
+  worstHoldByPnl,
   hasTrades,
 }: {
   bestSessionByScore: ScoreTimeRow | null;
   bestSessionByPnl: ScoreTimeRow | null;
+  worstSessionByPnl: ScoreTimeRow | null;
   bestHourByScore: ScoreTimeRow | null;
   bestHourByPnl: ScoreTimeRow | null;
+  worstHourByPnl: ScoreTimeRow | null;
   bestWeekdayByScore: ScoreTimeRow | null;
   bestWeekdayByPnl: ScoreTimeRow | null;
+  worstWeekdayByPnl: ScoreTimeRow | null;
   bestHoldByScore: ScoreTimeRow | null;
   bestHoldByPnl: ScoreTimeRow | null;
+  worstHoldByPnl: ScoreTimeRow | null;
   hasTrades: boolean;
 }) {
   const sS = formatScoreBestCallout(bestSessionByScore);
@@ -258,6 +284,10 @@ function BestStrips({
   const wP = formatPnlBestCallout(bestWeekdayByPnl);
   const hoS = formatScoreBestCallout(bestHoldByScore);
   const hoP = formatPnlBestCallout(bestHoldByPnl);
+  const sW = formatPnlWorstCallout(worstSessionByPnl);
+  const hW = formatPnlWorstCallout(worstHourByPnl);
+  const wW = formatPnlWorstCallout(worstWeekdayByPnl);
+  const hoW = formatPnlWorstCallout(worstHoldByPnl);
 
   const scoreBlock = (
     <>
@@ -313,8 +343,35 @@ function BestStrips({
     </>
   );
 
+  const worstBlock = (
+    <>
+      <li>
+        <span className="font-medium" style={{ color: "var(--text-secondary)" }}>Session: </span>
+        <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{sW.title}</span>
+        <span className="text-[var(--text-muted)]"> — {sW.detail}</span>
+      </li>
+      <li>
+        <span className="font-medium" style={{ color: "var(--text-secondary)" }}>Hour: </span>
+        <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{hW.title}</span>
+        <span className="text-[var(--text-muted)]"> — {hW.detail}</span>
+      </li>
+      <li>
+        <span className="font-medium" style={{ color: "var(--text-secondary)" }}>Weekday: </span>
+        <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{wW.title}</span>
+        <span className="text-[var(--text-muted)]"> — {wW.detail}</span>
+      </li>
+      {hasTrades ? (
+        <li>
+          <span className="font-medium" style={{ color: "var(--text-secondary)" }}>Hold: </span>
+          <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{hoW.title}</span>
+          <span className="text-[var(--text-muted)]"> — {hoW.detail}</span>
+        </li>
+      ) : null}
+    </>
+  );
+
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
       <BestPanel
         title="Best avg quality (score)"
         hint="Among buckets with at least one scored trade."
@@ -329,6 +386,13 @@ function BestStrips({
       >
         {pnlBlock}
       </BestPanel>
+      <BestPanel
+        title="Worst avg P&amp;L (and total)"
+        hint="Ranked by lowest average P&amp;L per trade; line shows avg, then total in that bucket."
+        variant="loss"
+      >
+        {worstBlock}
+      </BestPanel>
     </div>
   );
 }
@@ -342,12 +406,16 @@ export default function ScoreTimeMetricsTables({ session, hourly, weekday, holdT
 
   const bestSessionByScore = pickBestByAvgScore(sessionRows);
   const bestSessionByPnl = pickBestByAvgPnl(sessionRows);
+  const worstSessionByPnl = pickWorstByAvgPnl(sessionRows);
   const bestHourByScore = pickBestByAvgScore(hourlyRowsWithTrades);
   const bestHourByPnl = pickBestByAvgPnl(hourlyRowsWithTrades);
+  const worstHourByPnl = pickWorstByAvgPnl(hourlyRowsWithTrades);
   const bestWeekdayByScore = pickBestByAvgScore(weekdayRows);
   const bestWeekdayByPnl = pickBestByAvgPnl(weekdayRows);
+  const worstWeekdayByPnl = pickWorstByAvgPnl(weekdayRows);
   const bestHoldByScore = pickBestByAvgScore(holdRows);
   const bestHoldByPnl = pickBestByAvgPnl(holdRows);
+  const worstHoldByPnl = pickWorstByAvgPnl(holdRows);
 
   return (
     <div className="space-y-6">
@@ -358,18 +426,22 @@ export default function ScoreTimeMetricsTables({ session, hourly, weekday, holdT
         Weekday uses the <strong className="text-[var(--text-secondary)]">CME session trading day</strong> (HKT,
         06:00 session start — same as the calendar). <strong className="text-[var(--text-secondary)]">Hold time</strong>{" "}
         is minutes from entry to exit, in a multi-band hold spectrum. Avg quality uses scored trades; P&amp;L uses all trades in
-        the bucket. Empty buckets (no trades) are hidden, except the hour grid. Summary cards: one for best <strong className="text-[var(--text-secondary)]">avg quality</strong> (scored trades only), one for best <strong className="text-[var(--text-secondary)]">avg P&amp;L</strong> (and that bucket&apos;s total).
+        the bucket. Empty buckets (no trades) are hidden, except the hour grid. Summary cards: best <strong className="text-[var(--text-secondary)]">avg quality</strong> (scored trades only), best and worst <strong className="text-[var(--text-secondary)]">avg P&amp;L</strong> (and that bucket&apos;s total).
       </p>
 
       <BestStrips
         bestSessionByScore={bestSessionByScore}
         bestSessionByPnl={bestSessionByPnl}
+        worstSessionByPnl={worstSessionByPnl}
         bestHourByScore={bestHourByScore}
         bestHourByPnl={bestHourByPnl}
+        worstHourByPnl={worstHourByPnl}
         bestWeekdayByScore={bestWeekdayByScore}
         bestWeekdayByPnl={bestWeekdayByPnl}
+        worstWeekdayByPnl={worstWeekdayByPnl}
         bestHoldByScore={bestHoldByScore}
         bestHoldByPnl={bestHoldByPnl}
+        worstHoldByPnl={worstHoldByPnl}
         hasTrades={hasTrades}
       />
 
@@ -398,8 +470,17 @@ export default function ScoreTimeMetricsTables({ session, hourly, weekday, holdT
                 Top P&amp;L: {formatPnlBestCallout(bestSessionByPnl).title} —{" "}
                 {formatPnlBestCallout(bestSessionByPnl).detail}
               </span>
+              <span className="block" style={{ color: "var(--loss)" }}>
+                Worst P&amp;L: {formatPnlWorstCallout(worstSessionByPnl).title} —{" "}
+                {formatPnlWorstCallout(worstSessionByPnl).detail}
+              </span>
             </p>
-            <MetricsTable rows={sessionRows} bestByScore={bestSessionByScore} bestByPnl={bestSessionByPnl} />
+            <MetricsTable
+              rows={sessionRows}
+              bestByScore={bestSessionByScore}
+              bestByPnl={bestSessionByPnl}
+              worstByPnl={worstSessionByPnl}
+            />
           </section>
           <section
             className="rounded-lg p-4"
@@ -421,8 +502,17 @@ export default function ScoreTimeMetricsTables({ session, hourly, weekday, holdT
                 Top P&amp;L: {formatPnlBestCallout(bestWeekdayByPnl).title} —{" "}
                 {formatPnlBestCallout(bestWeekdayByPnl).detail}
               </span>
+              <span className="block" style={{ color: "var(--loss)" }}>
+                Worst P&amp;L: {formatPnlWorstCallout(worstWeekdayByPnl).title} —{" "}
+                {formatPnlWorstCallout(worstWeekdayByPnl).detail}
+              </span>
             </p>
-            <MetricsTable rows={weekdayRows} bestByScore={bestWeekdayByScore} bestByPnl={bestWeekdayByPnl} />
+            <MetricsTable
+              rows={weekdayRows}
+              bestByScore={bestWeekdayByScore}
+              bestByPnl={bestWeekdayByPnl}
+              worstByPnl={worstWeekdayByPnl}
+            />
           </section>
           <section
             className="rounded-lg p-4"
@@ -442,11 +532,15 @@ export default function ScoreTimeMetricsTables({ session, hourly, weekday, holdT
               <span className="block" style={{ color: "var(--profit)" }}>
                 Top P&amp;L: {formatPnlBestCallout(bestHoldByPnl).title} — {formatPnlBestCallout(bestHoldByPnl).detail}
               </span>
+              <span className="block" style={{ color: "var(--loss)" }}>
+                Worst P&amp;L: {formatPnlWorstCallout(worstHoldByPnl).title} — {formatPnlWorstCallout(worstHoldByPnl).detail}
+              </span>
             </p>
             <MetricsTable
               rows={holdRows}
               bestByScore={bestHoldByScore}
               bestByPnl={bestHoldByPnl}
+              worstByPnl={worstHoldByPnl}
               firstColumnLabel="Hold time"
             />
           </section>
@@ -472,6 +566,10 @@ export default function ScoreTimeMetricsTables({ session, hourly, weekday, holdT
               Top P&amp;L: {formatPnlBestCallout(bestHourByPnl).title} —{" "}
               {formatPnlBestCallout(bestHourByPnl).detail}
             </span>
+            <span className="block" style={{ color: "var(--loss)" }}>
+              Worst P&amp;L: {formatPnlWorstCallout(worstHourByPnl).title} —{" "}
+              {formatPnlWorstCallout(worstHourByPnl).detail}
+            </span>
           </p>
           <div className="flex min-h-0 flex-1 flex-col">
             <MetricsTable
@@ -479,6 +577,7 @@ export default function ScoreTimeMetricsTables({ session, hourly, weekday, holdT
               dense
               bestByScore={bestHourByScore}
               bestByPnl={bestHourByPnl}
+              worstByPnl={worstHourByPnl}
               fillHeight
             />
           </div>

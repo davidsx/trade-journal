@@ -81,6 +81,17 @@ export default function HourlyPnlSummary({ hourly, title = "Hourly P&L (HKT, ent
     return m;
   }, [active]);
 
+  // Bottom 3 hours by total P&L (only losing ones qualify) → hour → rank 1..3 (1 = worst).
+  const worstRankByHour = useMemo(() => {
+    const m = new Map<number, number>();
+    active
+      .filter((b) => b.totalPnl < 0)
+      .sort((a, b) => a.totalPnl - b.totalPnl)
+      .slice(0, 3)
+      .forEach((b, i) => m.set(b.hour, i + 1));
+    return m;
+  }, [active]);
+
   const RANK_COLORS = ["#fbbf24", "#cbd5e1", "#d8a15a"]; // gold / silver / bronze
 
   return (
@@ -141,6 +152,7 @@ export default function HourlyPnlSummary({ hourly, title = "Hourly P&L (HKT, ent
                 const pos = b.totalPnl >= 0;
                 const meta = sessionMeta(b.session);
                 const rank = rankByHour.get(b.hour);
+                const worstRank = worstRankByHour.get(b.hour);
                 return (
                   <tr
                     key={b.hour}
@@ -155,7 +167,6 @@ export default function HourlyPnlSummary({ hourly, title = "Hourly P&L (HKT, ent
                     <td className="py-1.5 pr-2 font-mono tabular-nums whitespace-nowrap">
                       <span className="flex items-center gap-1.5">
                         {b.hourLabel}
-                        {isLive && <LivePill size="sm" />}
                         {rank !== undefined && (
                           <span
                             className="inline-flex items-center gap-0.5 text-xs font-bold leading-none"
@@ -166,6 +177,17 @@ export default function HourlyPnlSummary({ hourly, title = "Hourly P&L (HKT, ent
                             {rank}
                           </span>
                         )}
+                        {worstRank !== undefined && (
+                          <span
+                            className="inline-flex items-center gap-0.5 text-xs font-bold leading-none"
+                            style={{ color: "var(--loss)" }}
+                            title={`#${worstRank} worst hour by total P&L`}
+                          >
+                            <span aria-hidden>⚠</span>
+                            {worstRank}
+                          </span>
+                        )}
+                        {isLive && <LivePill size="sm" />}
                       </span>
                     </td>
                     <td className="py-1.5 pr-2">

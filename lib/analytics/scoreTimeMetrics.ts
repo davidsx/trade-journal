@@ -214,3 +214,18 @@ export function pickBestByAvgPnl(rows: readonly ScoreTimeRow[]): ScoreTimeRow | 
   });
   return resolveRow(rows, sorted[0]!);
 }
+
+/**
+ * Lowest average net P&amp;L per trade in the bucket (all buckets with trades).
+ * Ties: lower total P&amp;L in bucket, then more trades.
+ */
+export function pickWorstByAvgPnl(rows: readonly ScoreTimeRow[]): ScoreTimeRow | null {
+  const pool = rows.filter((r) => r.tradeCount > 0);
+  if (pool.length === 0) return null;
+  const sorted = [...pool].sort((a, b) => {
+    if (a.avgPnl !== b.avgPnl) return a.avgPnl - b.avgPnl;
+    if (a.totalPnl !== b.totalPnl) return a.totalPnl - b.totalPnl;
+    return b.tradeCount - a.tradeCount;
+  });
+  return resolveRow(rows, sorted[0]!);
+}

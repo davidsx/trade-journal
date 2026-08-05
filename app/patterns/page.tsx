@@ -10,7 +10,7 @@ import {
   analyzeEdgeDecay,
   analyzeSessionPerformance,
   analyzeHourly,
-  rankTopHoursAcrossAccounts,
+  rankAllHoursAcrossAccounts,
   rankTopSessionsAcrossAccounts,
 } from "@/lib/analytics/patterns";
 import TimeHeatmap from "@/components/TimeHeatmap";
@@ -70,7 +70,7 @@ export default async function PatternsPage({
   }
   const tradesByAccount = [...tradesByAccountMap.values()];
   const accountsCounted = tradesByAccount.filter((a) => a.length > 0).length;
-  const topHours = rankTopHoursAcrossAccounts(tradesByAccount);
+  const allHours = rankAllHoursAcrossAccounts(tradesByAccount);
   const topSessions = rankTopSessionsAcrossAccounts(tradesByAccount);
 
   const decayAlerts = edgeDecay.filter((e) => e.decayAlert);
@@ -123,7 +123,7 @@ export default async function PatternsPage({
 
       <HourlyPnlSummary hourly={hourly} title="Hourly P&L (HKT, entry)" />
 
-      <TopHoursAcrossAccounts tallies={topHours} accountsCounted={accountsCounted} />
+      <TopHoursAcrossAccounts tallies={allHours} accountsCounted={accountsCounted} />
 
       <SessionPerformanceGrid
         sessions={sessions}

@@ -121,7 +121,18 @@ export default async function PatternsPage({
         <TimeHeatmap timeOfDay={timeOfDay} dayOfWeek={dayOfWeek} />
       </div>
 
-      <HourlyPnlSummary hourly={hourly} title="Hourly P&L (HKT, entry)" />
+      <HourlyPnlSummary
+        hourly={hourly}
+        title="Hourly P&L (HKT, entry)"
+        trades={trades.map((t) => ({
+          id: t.id,
+          contractName: t.contractName,
+          direction: t.direction,
+          entryTime: t.entryTime.toISOString(),
+          netPnl: t.netPnl,
+          holdingMins: t.holdingMins,
+        }))}
+      />
 
       <TopHoursAcrossAccounts tallies={allHours} accountsCounted={accountsCounted} />
 

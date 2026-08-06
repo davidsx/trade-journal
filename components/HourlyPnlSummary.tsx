@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type { SessionName } from "@/lib/analytics/patterns";
 import LivePill from "@/components/LivePill";
 
@@ -18,9 +19,20 @@ interface HourlyBucket {
   worstTrade: number;
 }
 
+export interface HourlyTradeRow {
+  id: string;
+  contractName: string;
+  direction: string;
+  entryTime: string; // ISO
+  netPnl: number;
+  holdingMins: number;
+}
+
 interface Props {
   hourly: HourlyBucket[];
   title?: string;
+  /** Individual trades, used to drill down into a clicked hour (grouped by HKT entry hour). */
+  trades?: HourlyTradeRow[];
 }
 
 const HKT_OFFSET_MS = 8 * 60 * 60 * 1000;
@@ -46,7 +58,19 @@ function sessionMeta(s: SessionName): { fg: string; bg: string; abbr: string } {
   }
 }
 
-export default function HourlyPnlSummary({ hourly, title = "Hourly P&L (HKT, entry)" }: Props) {
+function fmtTimeHkt(iso: string) {
+  const d = new Date(new Date(iso).getTime() + HKT_OFFSET_MS);
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${hh}:${mm}`;
+}
+
+function fmtHold(mins: number) {
+  return mins < 60 ? `${mins.toFixed(0)}m` : `${(mins / 60).toFixed(1)}h`;
+}
+
+export default function HourlyPnlSummary({ hourly, title = "Hourly P&L (HKT, entry)", trades }: Props) {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
@@ -55,6 +79,25 @@ export default function HourlyPnlSummary({ hourly, title = "Hourly P&L (HKT, ent
   }, []);
 
   const liveHour = useMemo(() => (now ? hktHour(now) : null), [now]);
+
+  const [openHour, setOpenHour] = useState<number | null>(null);
+
+  // Trades grouped by HKT entry hour, newest first within each hour.
+  const tradesByHour = useMemo(() => {
+    const m = new Map<number, HourlyTradeRow[]>();
+    for (const t of trades ?? []) {
+      const h = hktHour(new Date(t.entryTime));
+      const arr = m.get(h);
+      if (arr) arr.push(t);
+      else m.set(h, [t]);
+    }
+    for (const arr of m.values()) {
+      arr.sort((a, b) => +new Date(b.entryTime) - +new Date(a.entryTime));
+    }
+    return m;
+  }, [trades]);
+
+  const canExpand = (trades?.length ?? 0) > 0;
 
   const active = hourly.filter((b) => b.tradeCount > 0);
   const maxAbs = Math.max(...hourly.map((b) => Math.abs(b.totalPnl)), 1);
@@ -114,6 +157,7 @@ export default function HourlyPnlSummary({ hourly, title = "Hourly P&L (HKT, ent
       </div>
       <p className="text-xs mb-4" style={{ color: "var(--text-muted)" }}>
         One row per clock hour, CME day order 06:00 → 05:00 HKT. Bar length = total P&amp;L vs the biggest hour.
+        {canExpand && <span className="ml-1">Click an hour to see its trades.</span>}
         {best && worst && best.hour !== worst.hour && (
           <span className="ml-1">
             Best <span style={{ color: "var(--profit)" }}>{best.hourLabel}</span> ({fmtUsd(best.totalPnl)}), worst{" "}
@@ -153,19 +197,35 @@ export default function HourlyPnlSummary({ hourly, title = "Hourly P&L (HKT, ent
                 const meta = sessionMeta(b.session);
                 const rank = rankByHour.get(b.hour);
                 const worstRank = worstRankByHour.get(b.hour);
+                const expandable = canExpand && !empty;
+                const isOpen = openHour === b.hour;
+                const hourTrades = isOpen ? tradesByHour.get(b.hour) ?? [] : [];
                 return (
+                  <Fragment key={b.hour}>
                   <tr
-                    key={b.hour}
+                    onClick={expandable ? () => setOpenHour((h) => (h === b.hour ? null : b.hour)) : undefined}
                     style={{
                       borderBottom: "1px solid var(--bg-border)",
-                      background: isLive
+                      background: isOpen
+                        ? "color-mix(in srgb, var(--accent) 8%, transparent)"
+                        : isLive
                         ? "color-mix(in srgb, var(--accent) 10%, transparent)"
                         : undefined,
                       opacity: empty ? 0.45 : 1,
+                      cursor: expandable ? "pointer" : undefined,
                     }}
                   >
                     <td className="py-1.5 pr-2 font-mono tabular-nums whitespace-nowrap">
                       <span className="flex items-center gap-1.5">
+                        {expandable && (
+                          <span
+                            aria-hidden
+                            className="inline-block text-[10px] transition-transform"
+                            style={{ color: "var(--text-muted)", transform: isOpen ? "rotate(90deg)" : "none" }}
+                          >
+                            ▶
+                          </span>
+                        )}
                         {b.hourLabel}
                         {rank !== undefined && (
                           <span
@@ -249,6 +309,69 @@ export default function HourlyPnlSummary({ hourly, title = "Hourly P&L (HKT, ent
                       {empty ? "—" : fmtUsd(b.worstTrade)}
                     </td>
                   </tr>
+                  {isOpen && (
+                    <tr style={{ borderBottom: "1px solid var(--bg-border)" }}>
+                      <td colSpan={10} className="px-3 pb-3 pt-1">
+                        <div
+                          className="rounded-md overflow-hidden"
+                          style={{ border: "1px solid var(--bg-border)", background: "var(--bg-base)" }}
+                        >
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr style={{ borderBottom: "1px solid var(--bg-border)" }}>
+                                {["Contract", "Dir", "Entry (HKT)", "Hold", "Net P&L", ""].map((h) => (
+                                  <th
+                                    key={h}
+                                    className={`px-3 py-1.5 uppercase tracking-wide ${
+                                      h === "Net P&L" ? "text-right" : "text-left"
+                                    }`}
+                                    style={{ color: "var(--text-muted)" }}
+                                  >
+                                    {h}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {hourTrades.map((t) => (
+                                <tr key={t.id} style={{ borderBottom: "1px solid var(--bg-border)" }}>
+                                  <td className="px-3 py-1.5 font-medium">{t.contractName}</td>
+                                  <td
+                                    className="px-3 py-1.5"
+                                    style={{ color: t.direction === "Long" ? "var(--profit)" : "var(--loss)" }}
+                                  >
+                                    {t.direction}
+                                  </td>
+                                  <td className="px-3 py-1.5 tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                                    {fmtTimeHkt(t.entryTime)}
+                                  </td>
+                                  <td className="px-3 py-1.5 tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                                    {fmtHold(t.holdingMins)}
+                                  </td>
+                                  <td
+                                    className="px-3 py-1.5 text-right tabular-nums font-medium"
+                                    style={{ color: t.netPnl >= 0 ? "var(--profit)" : "var(--loss)" }}
+                                  >
+                                    {fmtUsd(t.netPnl)}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right">
+                                    <Link
+                                      href={`/trades/${t.id}`}
+                                      className="font-medium hover:underline"
+                                      style={{ color: "var(--accent)" }}
+                                    >
+                                      Details →
+                                    </Link>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>

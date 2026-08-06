@@ -55,8 +55,8 @@ export default async function DashboardPage() {
       tradeCount: a._count.trades,
     }));
 
-  // Cost / payout totals across non-hidden accounts (cost scales by copies; payout is a per-row total).
-  const totalCost = statusAccounts.reduce((sum, a) => sum + a.cost * a.numberOfAccounts, 0);
+  // Cost / payout totals across non-hidden accounts (both are per-row totals already).
+  const totalCost = statusAccounts.reduce((sum, a) => sum + a.cost, 0);
   const totalPayout = statusAccounts.reduce((sum, a) => sum + a.payout, 0);
   const netAfterFees = totalPayout - totalCost;
 

@@ -79,7 +79,7 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
   const [payoutValue, setPayoutValue] = useState("");
   const [showHidden, setShowHidden] = useState(false);
 
-  const totalCost = accounts.reduce((sum, a) => sum + a.cost * a.numberOfAccounts, 0);
+  const totalCost = accounts.reduce((sum, a) => sum + a.cost, 0);
   const totalPayout = accounts.reduce((sum, a) => sum + a.payout, 0);
   const hiddenCount = accounts.filter((a) => a.hiddenFromStats).length;
   const visibleAccounts = showHidden ? accounts : accounts.filter((a) => !a.hiddenFromStats);

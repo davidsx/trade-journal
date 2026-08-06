@@ -12,6 +12,18 @@ export default async function DashboardPage() {
   const [settings, accountId] = await Promise.all([getAccountSettings(), getActiveAccountId()]);
   const trades = await prisma.trade.findMany({ where: tradesWhere(accountId), orderBy: { entryTime: "asc" } });
 
+  // Calendar aggregates every non-hidden account (running, breached, and passed alike);
+  // only accounts explicitly hidden from stats are excluded.
+  const hiddenAccounts = await prisma.account.findMany({
+    where: { hiddenFromStats: true },
+    select: { id: true },
+  });
+  const hiddenIds = hiddenAccounts.map((a) => a.id);
+  const calendarTrades = await prisma.trade.findMany({
+    where: hiddenIds.length > 0 ? { accountId: { notIn: hiddenIds } } : {},
+    orderBy: { entryTime: "asc" },
+  });
+
   // Cross-account status: running (non-breached) evals + funded. Hidden accounts are excluded.
   const [statusAccounts, pnlByAccount] = await Promise.all([
     prisma.account.findMany({
@@ -127,7 +139,7 @@ export default async function DashboardPage() {
         style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
       >
         <TradingCalendar
-          trades={trades.map((t) => ({
+          trades={calendarTrades.map((t) => ({
             id: t.id,
             contractName: t.contractName,
             direction: t.direction,

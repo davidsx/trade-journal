@@ -304,8 +304,8 @@ export default function TradingCalendar({ trades }: Props) {
       </div>
 
       <p className="text-[11px] mt-2" style={{ color: "var(--text-muted)" }}>
-        Daily net P&amp;L by CME trading day (HKT session date from exit). Session 06:00–05:00 HKT; 05:00–06:00 break.
-        Win rate = winners / trades in that day or week row.
+        Daily net P&amp;L by CME trading day (HKT session date from exit), across all accounts except those hidden from stats.
+        Session 06:00–05:00 HKT; 05:00–06:00 break. Win rate = winners / trades in that day or week row.
       </p>
     </div>
   );

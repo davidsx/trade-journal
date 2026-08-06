@@ -3,10 +3,9 @@ import { getActiveAccountId } from "@/lib/activeAccount";
 import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 import TradeTable from "@/components/TradeTable";
-import RescoreButton from "@/components/RescoreButton";
 import ClearTradesButton from "@/components/ClearTradesButton";
 
-const VALID_SORT_FIELDS = ["entryTime", "netPnl", "qualityScore", "holdingMins"] as const;
+const VALID_SORT_FIELDS = ["entryTime", "netPnl", "holdingMins"] as const;
 type SortField = (typeof VALID_SORT_FIELDS)[number];
 
 export default async function TradesPage({
@@ -62,7 +61,6 @@ export default async function TradesPage({
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <RescoreButton />
           <ClearTradesButton />
         </div>
       </div>

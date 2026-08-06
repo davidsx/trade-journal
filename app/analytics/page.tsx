@@ -2,21 +2,10 @@ import { getActiveAccountId } from "@/lib/activeAccount";
 import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 import { computeSummaryMetrics } from "@/lib/analytics/metrics";
-import {
-  hktHoursInTradingDayOrder,
-  scoreMetricsByHktHour,
-  scoreMetricsByHoldingMins,
-  scoreMetricsByTradingDayWeekday,
-  scoreMetricsBySession,
-} from "@/lib/analytics/scoreTimeMetrics";
 import { getAccountSettings } from "@/lib/accountSettings";
 import EquityCurve from "@/components/EquityCurve";
 import DrawdownChart from "@/components/DrawdownChart";
 import PnlBarChart from "@/components/PnlBarChart";
-import ScoreDistributionChart from "@/components/ScoreDistributionChart";
-import ScorePnlChart from "@/components/ScorePnlChart";
-import type { ScorePnlPoint } from "@/components/ScorePnlChart";
-import ScoreTimeMetricsTables from "@/components/ScoreTimeMetricsTables";
 
 function formatAvgHoldMins(mins: number) {
   if (mins < 60) return `${Math.round(mins)}m`;
@@ -35,41 +24,6 @@ export default async function AnalyticsPage() {
   const metrics = computeSummaryMetrics(trades, {
     initialBalance: settings.initialBalance,
   });
-
-  // Score distribution: one bar per integer 0..100 (chart shows separated points, not 10-point bands)
-  const scoreDistBuckets = Array.from({ length: 101 }, (_, s) => ({
-    range: String(s),
-    bin: s,
-    count: 0,
-  }));
-  for (const t of trades) {
-    if (t.qualityScore !== null) {
-      const s = Math.round(Math.min(100, Math.max(0, t.qualityScore)));
-      scoreDistBuckets[s].count++;
-    }
-  }
-
-  // Score vs P&L — scatter points + per-bucket averages
-  const scorePnlPoints: ScorePnlPoint[] = trades
-    .filter((t) => t.qualityScore !== null)
-    .map((t) => ({ score: t.qualityScore!, pnl: t.netPnl, id: t.id }));
-
-  const bucketSums = Array.from({ length: 10 }, () => ({ sum: 0, count: 0 }));
-  for (const p of scorePnlPoints) {
-    const idx = Math.min(Math.floor(p.score / 10), 9);
-    bucketSums[idx].sum += p.pnl;
-    bucketSums[idx].count++;
-  }
-  const bucketAvgs = bucketSums.map((b, i) => ({
-    score: i * 10,
-    avgPnl: b.count > 0 ? b.sum / b.count : 0,
-    count: b.count,
-  }));
-
-  const sessionScoreRows = scoreMetricsBySession(trades);
-  const hourlyScoreRows = hktHoursInTradingDayOrder(scoreMetricsByHktHour(trades));
-  const weekdayScoreRows = scoreMetricsByTradingDayWeekday(trades);
-  const holdTimeScoreRows = scoreMetricsByHoldingMins(trades);
 
   return (
     <div className="space-y-6">
@@ -154,14 +108,6 @@ export default async function AnalyticsPage() {
         </div>
         <div>
           <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
-            Avg quality
-          </div>
-          <div className="font-semibold text-lg" style={{ color: "var(--text-primary)" }}>
-            {metrics.avgQualityScore === null ? "—" : metrics.avgQualityScore.toFixed(1)}
-          </div>
-        </div>
-        <div>
-          <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
             Avg hold
           </div>
           <div className="font-semibold text-lg" style={{ color: "var(--text-primary)" }}>
@@ -234,36 +180,6 @@ export default async function AnalyticsPage() {
           Per-Trade P&L
         </h2>
         <PnlBarChart trades={trades} />
-      </div>
-
-      {/* Score distribution */}
-      <div
-        className="rounded-lg p-4"
-        style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
-      >
-        <h2 className="text-sm font-medium mb-4" style={{ color: "var(--text-secondary)" }}>
-          Trade Quality Score Distribution
-        </h2>
-        <ScoreDistributionChart buckets={scoreDistBuckets} />
-      </div>
-
-      {/* Session / hour / weekday — quality score */}
-      <ScoreTimeMetricsTables
-        session={sessionScoreRows}
-        hourly={hourlyScoreRows}
-        weekday={weekdayScoreRows}
-        holdTime={holdTimeScoreRows}
-      />
-
-      {/* Score vs P&L */}
-      <div
-        className="rounded-lg p-4"
-        style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
-      >
-        <h2 className="text-sm font-medium mb-4" style={{ color: "var(--text-secondary)" }}>
-          Score vs Net P&L
-        </h2>
-        <ScorePnlChart points={scorePnlPoints} bucketAvgs={bucketAvgs} />
       </div>
     </div>
   );

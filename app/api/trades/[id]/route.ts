@@ -13,8 +13,5 @@ export async function GET(
   if (!trade) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  return NextResponse.json({
-    ...trade,
-    scoreNotes: trade.scoreNotes ? JSON.parse(trade.scoreNotes) : [],
-  });
+  return NextResponse.json(trade);
 }

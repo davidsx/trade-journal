@@ -33,10 +33,6 @@ const ICON_ANALYTICS = "M2 13 L6 8 L9 10 L14 3";
 const ICON_PATTERNS = "M8 2L14 8L8 14L2 8ZM5 8h6M8 5v6";
 // Chart: candlestick
 const ICON_CHART = "M4 3v3M4 9v4M4 5h2v4H4zM10 4v2M10 10v2M10 6h2v4h-2z";
-// Score guide: circle with question mark
-const ICON_SCORE = "M6.5 6a1.5 1.5 0 0 1 3 0c0 1-1.5 1.5-1.5 2.5M8 12v.5";
-// Insights: magnifying glass
-const ICON_INSIGHTS = "M10.5 10.5L14 14M7 11.5A4.5 4.5 0 1 0 7 2.5a4.5 4.5 0 0 0 0 9z";
 // Accounts: wallet / layers
 const ICON_ACCOUNTS = "M2 4h12v8H2zM4 6h8M4 9h5M14 2v3h3";
 
@@ -45,9 +41,7 @@ const NAV = [
   { href: "/trades",      label: "Trades",     iconPath: ICON_TRADES     },
   { href: "/analytics",   label: "Analytics",  iconPath: ICON_ANALYTICS  },
   { href: "/patterns",    label: "Patterns",   iconPath: ICON_PATTERNS   },
-  { href: "/insights",    label: "Insights",   iconPath: ICON_INSIGHTS   },
   { href: "/chart",       label: "Chart",      iconPath: ICON_CHART      },
-  { href: "/score-guide", label: "Score Guide",iconPath: ICON_SCORE      },
   { href: "/accounts",    label: "Accounts",   iconPath: ICON_ACCOUNTS   },
 ];
 

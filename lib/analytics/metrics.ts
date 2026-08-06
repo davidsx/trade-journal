@@ -31,7 +31,6 @@ export interface MetricsSummary {
   sharpeRatio: number;
   sortinoRatio: number;
   avgHoldingMins: number;
-  avgQualityScore: number | null;
   /** Account size before the first trade (from settings). */
   startingCapital: number;
   equityCurve: EquityPoint[];
@@ -136,7 +135,6 @@ export function computeSummaryMetrics(trades: Trade[], options: AccountMetricsOp
       sharpeRatio: 0,
       sortinoRatio: 0,
       avgHoldingMins: 0,
-      avgQualityScore: null,
       startingCapital: initialBalance > 0 ? initialBalance : DEFAULT_INITIAL_BALANCE,
       equityCurve: [],
       drawdownSeries: [],
@@ -150,8 +148,6 @@ export function computeSummaryMetrics(trades: Trade[], options: AccountMetricsOp
   const drawdownSeries = computeDrawdownSeries(equityCurve);
   const maxDrawdownAbs = Math.min(...drawdownSeries.map((d) => d.drawdownAbs), 0);
   const maxDrawdownPct = Math.min(...drawdownSeries.map((d) => d.drawdownPct), 0);
-
-  const scores = trades.map((t) => t.qualityScore).filter((s): s is number => s !== null);
 
   return {
     totalTrades: trades.length,
@@ -168,7 +164,6 @@ export function computeSummaryMetrics(trades: Trade[], options: AccountMetricsOp
     sharpeRatio: computeSharpe(trades),
     sortinoRatio: computeSortino(trades),
     avgHoldingMins: trades.reduce((s, t) => s + t.holdingMins, 0) / trades.length,
-    avgQualityScore: scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
     startingCapital: initialBalance,
     equityCurve,
     drawdownSeries,

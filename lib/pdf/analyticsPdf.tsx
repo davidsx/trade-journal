@@ -9,7 +9,6 @@ import {
   Rect,
 } from "@react-pdf/renderer";
 import type { AccountReportPayload } from "@/lib/pdf/buildAccountReportPayload";
-import type { ScoreTimeRow } from "@/lib/analytics/scoreTimeMetrics";
 
 const palette = {
   text: "#111827",
@@ -68,16 +67,6 @@ function fmtPnlPlain(n: number) {
 function fmtUsd(v: number) {
   const sign = v >= 0 ? "+" : "-";
   return `${sign}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function formatScoreBest(r: ScoreTimeRow | null): string {
-  if (!r || r.scoredCount === 0 || r.avgQuality === null) return "— (no scored trades)";
-  return `${r.label}: avg score ${r.avgQuality.toFixed(1)} · ${r.tradeCount} trades (${r.scoredCount} scored)`;
-}
-
-function formatPnlBest(r: ScoreTimeRow | null): string {
-  if (!r || r.tradeCount === 0) return "— (no trades)";
-  return `${r.label}: avg P&L ${fmtPnlPlain(r.avgPnl)} · total ${fmtPnlPlain(r.totalPnl)} · ${r.tradeCount} trades`;
 }
 
 function DrawdownSvg({ series, maxPctLabel }: { series: { drawdownPct: number }[]; maxPctLabel: string }) {
@@ -153,67 +142,6 @@ function PerTradePnlSvg({ pnls }: { pnls: number[] }) {
   );
 }
 
-function ScoreMetricsTable({
-  title,
-  firstColumnLabel,
-  rows,
-}: {
-  title: string;
-  firstColumnLabel: string;
-  rows: ScoreTimeRow[];
-}) {
-  if (rows.length === 0) {
-    return (
-      <View>
-        <Text style={styles.h2}>{title}</Text>
-        <Text style={styles.muted}>No data</Text>
-      </View>
-    );
-  }
-  return (
-    <View>
-      <Text style={styles.h2}>{title}</Text>
-      <View style={styles.tableHeader}>
-        <Text style={{ ...styles.th, width: "28%" }}>{firstColumnLabel}</Text>
-        <Text style={{ ...styles.th, width: "10%" }}>Trades</Text>
-        <Text style={{ ...styles.th, width: "10%" }}>Scored</Text>
-        <Text style={{ ...styles.th, width: "12%" }}>Avg Q</Text>
-        <Text style={{ ...styles.th, width: "20%" }}>Avg P&amp;L</Text>
-        <Text style={{ ...styles.th, width: "20%" }}>Total P&amp;L</Text>
-      </View>
-      {rows.map((r) => (
-        <View key={`${r.label}||${r.sublabel ?? ""}`} style={styles.tableRow} wrap={false}>
-          <View style={{ width: "28%" }}>
-            <Text style={styles.td}>{r.label}</Text>
-            {r.sublabel ? <Text style={styles.muted}>{r.sublabel}</Text> : null}
-          </View>
-          <Text style={{ ...styles.td, width: "10%" }}>{r.tradeCount}</Text>
-          <Text style={{ ...styles.td, width: "10%" }}>{r.scoredCount}</Text>
-          <Text style={{ ...styles.td, width: "12%" }}>{r.avgQuality !== null ? r.avgQuality.toFixed(1) : "—"}</Text>
-          <Text
-            style={{
-              ...styles.td,
-              width: "20%",
-              color: r.tradeCount > 0 ? (r.avgPnl >= 0 ? palette.profit : palette.loss) : palette.muted,
-            }}
-          >
-            {r.tradeCount > 0 ? fmtPnlPlain(r.avgPnl) : "—"}
-          </Text>
-          <Text
-            style={{
-              ...styles.td,
-              width: "20%",
-              color: r.tradeCount > 0 ? (r.totalPnl >= 0 ? palette.profit : palette.loss) : palette.muted,
-            }}
-          >
-            {r.tradeCount > 0 ? fmtPnlPlain(r.totalPnl) : "—"}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
 export function AnalyticsSummaryAndChartsPage({ data }: { data: AccountReportPayload }) {
   const m = data.metrics;
   const a = data.analytics;
@@ -283,12 +211,6 @@ export function AnalyticsSummaryAndChartsPage({ data }: { data: AccountReportPay
           </Text>
         </View>
         <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Avg quality</Text>
-          <Text style={styles.statValue}>
-            {m.avgQualityScore === null ? "—" : m.avgQualityScore.toFixed(1)}
-          </Text>
-        </View>
-        <View style={styles.statCell}>
           <Text style={styles.statLabel}>Avg hold</Text>
           <Text style={styles.statValue}>
             {m.totalTrades === 0 ? "—" : formatAvgHoldMins(m.avgHoldingMins)}
@@ -308,143 +230,6 @@ export function AnalyticsSummaryAndChartsPage({ data }: { data: AccountReportPay
       </Text>
       <View style={{ marginTop: 4 }}>
         <PerTradePnlSvg pnls={a.perTradeNetPnl} />
-      </View>
-    </Page>
-  );
-}
-
-export function AnalyticsScoreDistributionsPage({ data }: { data: AccountReportPayload }) {
-  const a = data.analytics;
-  return (
-    <Page size="A4" style={styles.page}>
-      <Text style={styles.h1}>Analytics (continued)</Text>
-      <Text style={styles.h2}>Trade quality score distribution</Text>
-      <Text style={styles.muted} wrap>
-        Counts of rounded scores 0-100, grouped in 10-point bands; last band 90-100. Matches a binned view of the app histogram.
-      </Text>
-      <View style={[styles.tableHeader, { marginTop: 6 }]}>
-        <Text style={{ ...styles.th, width: "50%" }}>Score range</Text>
-        <Text style={{ ...styles.th, width: "50%" }}>Trades</Text>
-      </View>
-      {a.scoreDist10Bins.map((b) => (
-        <View key={b.label} style={styles.tableRow} wrap={false}>
-          <Text style={{ ...styles.td, width: "50%" }}>{b.label}</Text>
-          <Text style={{ ...styles.td, width: "50%" }}>{b.count}</Text>
-        </View>
-      ))}
-      <Text style={styles.h2}>Score vs net P&amp;L</Text>
-      <Text style={styles.muted} wrap>
-        Average net P&amp;L by score decile: same floor(score/10) bucketing as the app; 90-100 in the last bucket.
-      </Text>
-      <View style={[styles.tableHeader, { marginTop: 6 }]}>
-        <Text style={{ ...styles.th, width: "30%" }}>Score bucket</Text>
-        <Text style={{ ...styles.th, width: "20%" }}>Trades</Text>
-        <Text style={{ ...styles.th, width: "50%" }}>Avg net P&amp;L</Text>
-      </View>
-      {a.scorePnl10Buckets.map((b) => (
-        <View key={b.label} style={styles.tableRow} wrap={false}>
-          <Text style={{ ...styles.td, width: "30%" }}>{b.label}</Text>
-          <Text style={{ ...styles.td, width: "20%" }}>{b.count}</Text>
-          <Text
-            style={{
-              ...styles.td,
-              width: "50%",
-              color: b.count > 0 ? (b.avgPnl >= 0 ? palette.profit : palette.loss) : palette.muted,
-            }}
-          >
-            {b.count > 0 ? fmtPnlPlain(b.avgPnl) : "—"}
-          </Text>
-        </View>
-      ))}
-    </Page>
-  );
-}
-
-export function AnalyticsBestAndScoreTablesPage({ data }: { data: AccountReportPayload }) {
-  const b = data.analytics.bests;
-  return (
-    <Page size="A4" style={styles.page}>
-      <Text style={styles.h1}>Quality by time (summary)</Text>
-      <Text style={styles.muted} wrap>
-        Session and hour: entry in HKT. Hour order is Globex trading day (from 06:00). Weekday = CME session trading day. Hold = minutes in position. Best buckets use the same rules as the app callouts.
-      </Text>
-      <View style={styles.twoCol}>
-        <View style={styles.col}>
-          <Text style={[styles.h2, { color: palette.accent }]}>Best avg quality (score)</Text>
-          <Text style={styles.muted} wrap>
-            Session: {formatScoreBest(b.session.byScore)}
-          </Text>
-          <Text style={styles.muted} wrap>
-            Hour: {formatScoreBest(b.hour.byScore)}
-          </Text>
-          <Text style={styles.muted} wrap>
-            Weekday: {formatScoreBest(b.weekday.byScore)}
-          </Text>
-          <Text style={styles.muted} wrap>
-            Hold: {formatScoreBest(b.hold.byScore)}
-          </Text>
-        </View>
-        <View style={styles.col}>
-          <Text style={[styles.h2, { color: palette.profit }]}>Best avg P&amp;L</Text>
-          <Text style={styles.muted} wrap>
-            Session: {formatPnlBest(b.session.byPnl)}
-          </Text>
-          <Text style={styles.muted} wrap>
-            Hour: {formatPnlBest(b.hour.byPnl)}
-          </Text>
-          <Text style={styles.muted} wrap>
-            Weekday: {formatPnlBest(b.weekday.byPnl)}
-          </Text>
-          <Text style={styles.muted} wrap>
-            Hold: {formatPnlBest(b.hold.byPnl)}
-          </Text>
-        </View>
-      </View>
-      <View style={{ marginTop: 8 }}>
-        <ScoreMetricsTable
-          title="Quality score by session"
-          firstColumnLabel="Session"
-          rows={data.analytics.sessionRows}
-        />
-      </View>
-      <View style={{ marginTop: 8 }}>
-        <ScoreMetricsTable title="By weekday" firstColumnLabel="Day" rows={data.analytics.weekdayRows} />
-      </View>
-    </Page>
-  );
-}
-
-export function AnalyticsHoldPage({ data }: { data: AccountReportPayload }) {
-  return (
-    <Page size="A4" style={styles.page}>
-      <Text style={styles.h1}>By hold time</Text>
-      <Text style={styles.muted} wrap>
-        Time from entry to exit, same nine hold bands as the Analytics page (from sub-minute through multi-hour).
-      </Text>
-      <View style={{ marginTop: 6 }}>
-        <ScoreMetricsTable
-          title="By hold time"
-          firstColumnLabel="Hold"
-          rows={data.analytics.holdRows}
-        />
-      </View>
-    </Page>
-  );
-}
-
-export function AnalyticsHourlyPage({ data }: { data: AccountReportPayload }) {
-  return (
-    <Page size="A4" style={styles.page}>
-      <Text style={styles.h1}>By hour of day</Text>
-      <Text style={styles.muted} wrap>
-        HKT hour of entry, 06:00 through 05:00 (Globex trading-day order), including hours with no trades, matching the in-app table.
-      </Text>
-      <View style={{ marginTop: 6 }}>
-        <ScoreMetricsTable
-          title="By hour of day (HKT, entry time)"
-          firstColumnLabel="Hour"
-          rows={data.analytics.hourlyRows}
-        />
       </View>
     </Page>
   );

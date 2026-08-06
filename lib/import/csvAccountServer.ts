@@ -1,7 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { scoreTrades } from "@/lib/analytics/scorer";
 import type { ImportedTrade } from "@/lib/csv/parser";
-import type { TradeModel as Trade } from "@/app/generated/prisma/models";
 import { getActiveAccountId } from "@/lib/activeAccount";
 import { DEFAULT_INITIAL_BALANCE } from "@/lib/accountConstants";
 import { tradesWhere } from "@/lib/accountScope";
@@ -92,10 +90,13 @@ export async function upsertImportedTrades(trades: ImportedTrade[]): Promise<voi
 }
 
 /**
+ * Recompute running capital (capitalBefore/After) for an account's trades in
+ * entry-time order. Run after importing or after changing starting capital.
+ *
  * @param initialBalanceOverride - starting capital for the run (default: from `Account` row)
- * @param accountIdParam - which account’s trades to rescore (default: active account)
+ * @param accountIdParam - which account’s trades to recompute (default: active account)
  */
-export async function finalizeCsvAccountScoring(
+export async function finalizeCsvAccountCapital(
   initialBalanceOverride?: number,
   accountIdParam?: number
 ): Promise<void> {
@@ -110,30 +111,16 @@ export async function finalizeCsvAccountScoring(
 
   const start = initialBalanceOverride ?? acc.initialBalance;
   let capital = start;
-  const withCapital: Trade[] = all.map((row) => {
+  const withCapital = all.map((row) => {
     const capitalBefore = capital;
     capital += row.netPnl;
-    return {
-      ...row,
-      capitalBefore,
-      capitalAfter: capital,
-    };
+    return { id: row.id, capitalBefore, capitalAfter: capital };
   });
 
-  const scored = await scoreTrades(withCapital);
-
-  await runPool(scored, conc, async (t) => {
+  await runPool(withCapital, conc, async (t) => {
     await prisma.trade.update({
       where: { id: t.id },
-      data: {
-        capitalBefore: t.capitalBefore,
-        capitalAfter: t.capitalAfter,
-        qualityScore: t.qualityScore,
-        entryScore: t.entryScore,
-        exitScore: t.exitScore,
-        riskScore: t.riskScore,
-        scoreNotes: t.scoreNotes,
-      },
+      data: { capitalBefore: t.capitalBefore, capitalAfter: t.capitalAfter },
     });
   });
 }

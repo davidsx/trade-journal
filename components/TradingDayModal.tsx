@@ -16,7 +16,6 @@ import { analyzeSessionPerformanceLite } from "@/lib/analytics/patterns";
 import type { CalendarDayTrade } from "@/lib/calendarDayTrade";
 import SessionPerformanceGrid from "@/components/SessionPerformanceGrid";
 import PnlBarChart from "@/components/PnlBarChart";
-import ScoreBadge from "@/components/ScoreBadge";
 import TradingDayCandleChart, { type SessionCandleMarker } from "@/components/TradingDayCandleChart";
 import type { Candle } from "@/lib/analytics/loadDayCandles";
 
@@ -79,15 +78,12 @@ export default function TradingDayModal({ open, onClose, dayKey, allTrades }: Pr
 
   const stats = useMemo(() => {
     if (dayTrades.length === 0) {
-      return { total: 0, wins: 0, wr: 0, avgQ: null as number | null };
+      return { total: 0, wins: 0, wr: 0 };
     }
     const total = dayTrades.reduce((s, t) => s + t.netPnl, 0);
     const wins = dayTrades.filter((t) => t.netPnl > 0).length;
     const wr = wins / dayTrades.length;
-    const scored = dayTrades.filter((t) => t.qualityScore != null);
-    const avgQ =
-      scored.length > 0 ? scored.reduce((a, t) => a + (t.qualityScore ?? 0), 0) / scored.length : null;
-    return { total, wins, wr, avgQ };
+    return { total, wins, wr };
   }, [dayTrades]);
 
   const [dayCandles, setDayCandles] = useState<Candle[] | null>(null);
@@ -261,14 +257,6 @@ export default function TradingDayModal({ open, onClose, dayKey, allTrades }: Pr
                 </span>
               </span>
             )}
-            {stats.avgQ !== null && (
-              <span>
-                <span style={{ color: "var(--text-muted)" }}>Avg quality: </span>
-                <span className="font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>
-                  {stats.avgQ.toFixed(1)}
-                </span>
-              </span>
-            )}
           </div>
 
           <div
@@ -403,7 +391,6 @@ export default function TradingDayModal({ open, onClose, dayKey, allTrades }: Pr
                       Net P&amp;L
                     </th>
                     <th className="text-left p-2 pr-3 text-xs font-medium uppercase" style={{ color: "var(--text-muted)" }}>
-                      Score
                     </th>
                   </tr>
                 </thead>
@@ -439,8 +426,13 @@ export default function TradingDayModal({ open, onClose, dayKey, allTrades }: Pr
                         {fmtUsd(t.netPnl)}
                       </td>
                       <td className="p-2 pr-3">
-                        <Link href={`/trades/${t.id}`} onClick={onClose}>
-                          <ScoreBadge score={t.qualityScore} size="sm" />
+                        <Link
+                          href={`/trades/${t.id}`}
+                          onClick={onClose}
+                          className="text-xs font-medium hover:underline"
+                          style={{ color: "var(--accent)" }}
+                        >
+                          Details →
                         </Link>
                       </td>
                     </tr>

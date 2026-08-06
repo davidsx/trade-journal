@@ -1,5 +1,4 @@
 import Link from "next/link";
-import ScoreBadge from "./ScoreBadge";
 
 interface Trade {
   id: string;
@@ -12,7 +11,6 @@ interface Trade {
   exitTime: string | Date;
   holdingMins: number;
   netPnl: number;
-  qualityScore: number | null;
 }
 
 interface Props {
@@ -108,7 +106,7 @@ export default function TradeTable({ trades, sortBy, sortDir, queryParams = {} }
             <PlainHeader label="Exit" />
             <SortableHeader label="Hold" field="holdingMins" sortBy={sortBy} sortDir={sortDir} queryParams={queryParams} />
             <SortableHeader label="Net P&L" field="netPnl" sortBy={sortBy} sortDir={sortDir} queryParams={queryParams} />
-            <SortableHeader label="Score" field="qualityScore" sortBy={sortBy} sortDir={sortDir} queryParams={queryParams} />
+            <PlainHeader label="" />
           </tr>
         </thead>
         <tbody>
@@ -154,8 +152,12 @@ export default function TradeTable({ trades, sortBy, sortDir, queryParams = {} }
                 {fmtUsd(t.netPnl)}
               </td>
               <td className="px-4 py-2">
-                <Link href={`/trades/${t.id}`}>
-                  <ScoreBadge score={t.qualityScore} size="sm" />
+                <Link
+                  href={`/trades/${t.id}`}
+                  className="text-xs font-medium"
+                  style={{ color: "var(--accent)" }}
+                >
+                  Details →
                 </Link>
               </td>
             </tr>

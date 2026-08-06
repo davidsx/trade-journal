@@ -137,7 +137,6 @@ export default async function DashboardPage() {
             exitPrice: t.exitPrice,
             netPnl: t.netPnl,
             holdingMins: t.holdingMins,
-            qualityScore: t.qualityScore,
           }))}
         />
       </div>

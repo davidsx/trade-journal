@@ -10,13 +10,7 @@ import {
 } from "@react-pdf/renderer";
 import type { AccountReportPayload } from "@/lib/pdf/buildAccountReportPayload";
 import type { SessionName } from "@/lib/analytics/patterns";
-import {
-  AnalyticsBestAndScoreTablesPage,
-  AnalyticsHoldPage,
-  AnalyticsHourlyPage,
-  AnalyticsScoreDistributionsPage,
-  AnalyticsSummaryAndChartsPage,
-} from "@/lib/pdf/analyticsPdf";
+import { AnalyticsSummaryAndChartsPage } from "@/lib/pdf/analyticsPdf";
 
 const palette = {
   text: "#111827",
@@ -159,14 +153,6 @@ function formatPf(p: number) {
 
 function DashboardPage({ data }: { data: AccountReportPayload }) {
   const m = data.metrics;
-  const scoreColor =
-    m.avgQualityScore !== null
-      ? m.avgQualityScore >= 70
-        ? palette.profit
-        : m.avgQualityScore >= 40
-        ? palette.warn
-        : palette.loss
-      : palette.muted;
   return (
     <Page size="A4" style={styles.page}>
       <Text style={styles.h1}>Trade Journal — report</Text>
@@ -220,11 +206,6 @@ function DashboardPage({ data }: { data: AccountReportPayload }) {
               : `${(m.avgHoldingMins / 60).toFixed(1)}h`}
           </Text>
           <Text style={styles.statSub}>Average hold time</Text>
-        </View>
-        <View style={styles.statBox}>
-          <Text style={styles.statLabel}>Avg quality</Text>
-          <Text style={[styles.statValue, { color: scoreColor }]}>{m.avgQualityScore !== null ? m.avgQualityScore.toFixed(0) : "—"}</Text>
-          <Text style={styles.statSub}>0–100 score</Text>
         </View>
       </View>
       <Text style={styles.h2}>Equity curve</Text>
@@ -430,7 +411,6 @@ function TradesPageChunk({
             <Text style={{ ...styles.th, width: "20%" }}>Exit</Text>
             <Text style={{ ...styles.th, width: "6%" }}>Hold</Text>
             <Text style={{ ...styles.th, width: "10%" }}>Net P&amp;L</Text>
-            <Text style={{ ...styles.th, width: "6%" }}>Score</Text>
           </View>
           {chunk.map((t) => (
             <View key={t.id} style={styles.tableRow} wrap={false}>
@@ -455,7 +435,6 @@ function TradesPageChunk({
               <Text style={{ ...styles.td, width: "10%", color: t.netPnl >= 0 ? palette.profit : palette.loss, fontFamily: "Helvetica-Bold" }}>
                 {fmtUsd(t.netPnl)}
               </Text>
-              <Text style={{ ...styles.td, width: "6%" }}>{t.qualityScore ?? "—"}</Text>
             </View>
           ))}
         </>
@@ -478,10 +457,6 @@ export function AccountReportDocument({ data }: { data: AccountReportPayload }) 
     <Document>
       <DashboardPage data={data} />
       <AnalyticsSummaryAndChartsPage data={data} />
-      <AnalyticsScoreDistributionsPage data={data} />
-      <AnalyticsBestAndScoreTablesPage data={data} />
-      <AnalyticsHoldPage data={data} />
-      <AnalyticsHourlyPage data={data} />
       <PatternsPage data={data} />
       <PatternsPage2 data={data} />
       {tradeChunks.map((chunk, i) => (

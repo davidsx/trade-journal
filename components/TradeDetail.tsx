@@ -1,4 +1,3 @@
-import ScoreBadge from "@/components/ScoreBadge";
 import TradeDetailChart from "@/components/TradeDetailChart";
 import type { TradeModel as Trade } from "@/app/generated/prisma/models";
 import type { Candle } from "@/lib/analytics/loadDayCandles";
@@ -20,24 +19,7 @@ function fmtTime(dt: Date) {
   return `${mon} ${day}, ${year} ${hh}:${mm}:${ss} HKT`;
 }
 
-function ScoreBar({ label, value, max, color }: { label: string; value: number | null; max: number; color: string }) {
-  const pct = value !== null ? (value / max) * 100 : 0;
-  return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-sm">
-        <span style={{ color: "var(--text-secondary)" }}>{label}</span>
-        <span className="font-medium tabular-nums">{value ?? "—"} / {max}</span>
-      </div>
-      <div className="h-2 rounded-full overflow-hidden" style={{ background: "var(--bg-border)" }}>
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
-      </div>
-    </div>
-  );
-}
-
 export default function TradeDetail({ trade, dayCandles }: { trade: Trade; dayCandles?: Candle[] }) {
-  const notes: string[] = trade.scoreNotes ? JSON.parse(trade.scoreNotes) : [];
-
   const entryMarker = {
     time: Math.floor(new Date(trade.entryTime).getTime() / 1000),
     price: trade.entryPrice,
@@ -118,32 +100,6 @@ export default function TradeDetail({ trade, dayCandles }: { trade: Trade; dayCa
           exit={exitMarker}
         />
       </div>
-
-      {/* Quality score */}
-      <div className="rounded-lg p-5 space-y-4" style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}>
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>Quality Score</h2>
-          <ScoreBadge score={trade.qualityScore} size="lg" />
-        </div>
-        <ScoreBar label="Entry Quality" value={trade.entryScore} max={70} color="var(--accent)" />
-        <ScoreBar label="Exit Quality" value={trade.exitScore} max={25} color="var(--profit)" />
-        <ScoreBar label="Risk Management" value={trade.riskScore} max={5} color="var(--warn)" />
-      </div>
-
-      {/* Score notes */}
-      {notes.length > 0 && (
-        <div className="rounded-lg p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}>
-          <h2 className="text-sm font-medium mb-3" style={{ color: "var(--text-secondary)" }}>Score Breakdown</h2>
-          <ul className="space-y-2">
-            {notes.map((note, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm">
-                <span style={{ color: "var(--text-muted)", marginTop: 2 }}>•</span>
-                <span style={{ color: "var(--text-secondary)" }}>{note}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       {/* Capital context */}
       <div className="rounded-lg p-5 grid grid-cols-2 gap-4" style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}>

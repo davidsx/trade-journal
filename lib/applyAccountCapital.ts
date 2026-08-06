@@ -1,18 +1,19 @@
 import { prisma } from "@/lib/db/prisma";
-import { warmCandleCacheForScoring } from "@/lib/candles/warmForScoring";
-import { finalizeCsvAccountScoring } from "@/lib/import/csvAccountServer";
+import { finalizeCsvAccountCapital } from "@/lib/import/csvAccountServer";
 import { MAX_INITIAL_BALANCE } from "@/lib/accountConstants";
 
 const MIN = 0;
 
 /**
- * Persists `initialBalance` on the account, warms the candle range for that account’s
- * trades, and re-runs scoring. Use after changing starting capital.
+ * Persists `initialBalance` on the account and recomputes running capital for its
+ * trades. Use after changing starting capital.
+ *
+ * @param _appOrigin - retained for call-site compatibility; no longer used.
  */
 export async function applyAccountInitialBalance(
   accountId: number,
   initialBalance: number,
-  appOrigin: string
+  _appOrigin?: string
 ): Promise<void> {
   if (!Number.isFinite(initialBalance) || initialBalance <= MIN) {
     throw new Error("Initial balance must be a positive number");
@@ -29,6 +30,5 @@ export async function applyAccountInitialBalance(
     where: { id: accountId },
     data: { initialBalance: rounded },
   });
-  await warmCandleCacheForScoring(appOrigin, accountId);
-  await finalizeCsvAccountScoring(rounded, accountId);
+  await finalizeCsvAccountCapital(rounded, accountId);
 }

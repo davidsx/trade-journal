@@ -9,5 +9,4 @@ export type CalendarDayTrade = {
   exitPrice: number;
   netPnl: number;
   holdingMins: number;
-  qualityScore: number | null;
 };

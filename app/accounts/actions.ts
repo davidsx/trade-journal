@@ -117,7 +117,6 @@ export type AccountDetailsInput = {
   numberOfAccounts: number;
   stage: "Eval" | "Funded";
   cost: number;
-  payout: number;
 };
 
 export async function updateAccountDetailsAction(accountId: number, details: AccountDetailsInput) {
@@ -138,9 +137,6 @@ export async function updateAccountDetailsAction(accountId: number, details: Acc
   if (!Number.isFinite(details.cost) || details.cost < 0) {
     return { error: "Cost must be a non-negative number" };
   }
-  if (!Number.isFinite(details.payout) || details.payout < 0) {
-    return { error: "Payout must be a non-negative number" };
-  }
 
   await prisma.account.update({
     where: { id: accountId },
@@ -151,9 +147,49 @@ export async function updateAccountDetailsAction(accountId: number, details: Acc
       numberOfAccounts: details.numberOfAccounts,
       stage: details.stage,
       cost: details.cost,
-      payout: details.payout,
     },
   });
+  revalidateAll();
+  return { ok: true as const };
+}
+
+/** A payout entry to display/edit in the accounts UI. */
+export type PayoutInput = {
+  amount: number;
+  /** "YYYY-MM-DD" — stored at UTC midnight. */
+  date: string;
+  note: string | null;
+};
+
+function parsePayoutDate(date: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date.trim());
+  if (!m) return null;
+  const d = new Date(`${date}T00:00:00.000Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+export async function addPayoutAction(accountId: number, input: PayoutInput) {
+  const acc = await prisma.account.findUnique({ where: { id: accountId } });
+  if (!acc) return { error: "Account not found" };
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    return { error: "Payout amount must be a positive number" };
+  }
+  const date = parsePayoutDate(input.date);
+  if (!date) return { error: "Payout date is invalid" };
+  const note = input.note?.trim() || null;
+  if (note && note.length > 500) return { error: "Note is too long (max 500 characters)" };
+
+  const p = await prisma.payout.create({
+    data: { accountId, amount: input.amount, date, note },
+  });
+  revalidateAll();
+  return { ok: true as const, id: p.id };
+}
+
+export async function deletePayoutAction(payoutId: number) {
+  const exists = await prisma.payout.findUnique({ where: { id: payoutId } });
+  if (!exists) return { error: "Payout not found" };
+  await prisma.payout.delete({ where: { id: payoutId } });
   revalidateAll();
   return { ok: true as const };
 }

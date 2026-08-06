@@ -2,28 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { parseCsv, csvRowsToTrades } from "@/lib/csv/parser";
-import { importedTradeToWire } from "@/lib/csv/importWire";
+import { importCsvIntoAccount } from "@/lib/csv/importClient";
 import { DEFAULT_INITIAL_BALANCE } from "@/lib/accountConstants";
 import { accountLabel } from "@/lib/accountLabel";
-
-/** Parallel in-flight upserts (browser + server; avoid opening hundreds of connections). */
-const UPSERT_CONCURRENCY = 16;
-
-async function runPool<T>(items: T[], concurrency: number, fn: (item: T) => Promise<void>): Promise<void> {
-  if (items.length === 0) return;
-  const c = Math.max(1, Math.min(concurrency, items.length));
-  let next = 0;
-  await Promise.all(
-    Array.from({ length: c }, async () => {
-      while (true) {
-        const i = next++;
-        if (i >= items.length) break;
-        await fn(items[i]!);
-      }
-    })
-  );
-}
 
 /** Account choices for the import destination selector. */
 export type CsvUploadAccount = {
@@ -67,9 +48,6 @@ export default function CsvUpload({ variant = "sidebar", accounts, defaultAccoun
     setMessage(null);
 
     try {
-      const text = await file.text();
-      const rows = parseCsv(text);
-
       // Prefer an explicitly chosen destination; otherwise fall back to the active account.
       const chosen = canChoose ? accounts!.find((a) => a.id === targetId) : undefined;
       let initialBalance: number;
@@ -90,47 +68,8 @@ export default function CsvUpload({ variant = "sidebar", accounts, defaultAccoun
         accountId =
           typeof settings.accountId === "number" && settings.accountId > 0 ? settings.accountId : 1;
       }
-      const trades = csvRowsToTrades(rows, accountId, initialBalance);
-      const total = trades.length;
 
-      setMessage("1/3 Checking overlap…");
-      const overlapRes = await fetch("/api/import/overlap", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ csvIds: trades.map((t) => t.id), accountId }),
-      });
-      const overlapData = await overlapRes.json();
-      if (!overlapRes.ok) throw new Error(overlapData.error ?? "Overlap query failed");
-      const replacedCount: number = overlapData.replacedCount;
-
-      let done = 0;
-      await runPool(trades, UPSERT_CONCURRENCY, async (t) => {
-        const res = await fetch("/api/import/trade", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ trade: importedTradeToWire(t), accountId }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Upsert failed");
-        done += 1;
-        if (done % 25 === 0 || done === total) {
-          setMessage(`2/3 Importing… ${done}/${total}`);
-        }
-      });
-
-      setMessage("3/3 Scoring…");
-      const finRes = await fetch("/api/import/score", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          rowsInCsv: total,
-          symbol: trades[0]?.contractName,
-          replacedCount,
-          accountId,
-        }),
-      });
-      const data = await finRes.json();
-      if (!finRes.ok) throw new Error(data.error ?? "Scoring failed");
+      await importCsvIntoAccount(file, { accountId, initialBalance, onProgress: setMessage });
 
       setStatus("done");
       setMessage(null);

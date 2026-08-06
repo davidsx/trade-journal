@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import {
+  addPayoutAction,
   createAccountAction,
+  deletePayoutAction,
   deleteAccountAction,
   renameAccountAction,
   setAccountHiddenFromStatsAction,
@@ -13,6 +15,7 @@ import {
 } from "@/app/accounts/actions";
 import { DEFAULT_INITIAL_BALANCE } from "@/lib/accountConstants";
 import CsvUpload from "@/components/CsvUpload";
+import { importCsvIntoAccount } from "@/lib/csv/importClient";
 import { accountLabel } from "@/lib/accountLabel";
 
 export type AccountStage = "Eval" | "Funded";
@@ -28,6 +31,14 @@ const PROPFIRM_OPTIONS = ["Lucid", "Tradeify", "Apex", "FundedNext", "Topstep"] 
 /** Selectable starting-capital account sizes ($). */
 const CAPITAL_OPTIONS = [25_000, 50_000, 100_000, 150_000] as const;
 
+export type PayoutRow = {
+  id: number;
+  amount: number;
+  /** ISO timestamp (stored at UTC midnight). */
+  date: string;
+  note: string | null;
+};
+
 export type AccountRow = {
   id: number;
   name: string;
@@ -37,7 +48,9 @@ export type AccountRow = {
   numberOfAccounts: number;
   stage: AccountStage;
   cost: number;
+  /** Sum of the payout ledger for this account. */
   payout: number;
+  payouts: PayoutRow[];
   hiddenFromStats: boolean;
   pnl: number;
   initialBalance: number;
@@ -56,6 +69,10 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
   useEffect(() => {
     setAccounts(initialAccounts);
   }, [initialAccounts]);
+  // Keep the open payout modal in sync with fresh data after add/delete.
+  useEffect(() => {
+    setPayoutAcct((cur) => (cur ? initialAccounts.find((a) => a.id === cur.id) ?? null : null));
+  }, [initialAccounts]);
   const emptyNewAccount = {
     name: "",
     initialBalance: String(DEFAULT_INITIAL_BALANCE),
@@ -67,6 +84,8 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
   };
   const [newAccount, setNewAccount] = useState(emptyNewAccount);
   const [addOpen, setAddOpen] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [deleting, setDeleting] = useState<AccountRow | null>(null);
@@ -75,8 +94,8 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
   const [editForm, setEditForm] = useState({ name: "", propfirmName: "", initialBalance: "" });
   const [costEditId, setCostEditId] = useState<number | null>(null);
   const [costValue, setCostValue] = useState("");
-  const [payoutEditId, setPayoutEditId] = useState<number | null>(null);
-  const [payoutValue, setPayoutValue] = useState("");
+  const [payoutAcct, setPayoutAcct] = useState<AccountRow | null>(null);
+  const [newPayout, setNewPayout] = useState({ amount: "", date: "", note: "" });
   const [showHidden, setShowHidden] = useState(false);
 
   const totalCost = accounts.reduce((sum, a) => sum + a.cost, 0);
@@ -103,10 +122,13 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
   function openAdd() {
     setError(null);
     setNewAccount(emptyNewAccount);
+    setCsvFile(null);
+    setImportMsg(null);
     setAddOpen(true);
   }
 
   function closeAdd() {
+    if (pending) return;
     setAddOpen(false);
   }
 
@@ -130,6 +152,11 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
       setError("Number of accounts must be a positive whole number");
       return;
     }
+    const file = csvFile;
+    if (file && !file.name.endsWith(".csv")) {
+      setError("Please choose a .csv file to import");
+      return;
+    }
     startTransition(async () => {
       const r = await createAccountAction({
         name: n,
@@ -144,7 +171,27 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
         setError(r.error);
         return;
       }
+      // Optionally import the chosen CSV straight into the account we just created.
+      if (file && "id" in r && r.id) {
+        try {
+          await importCsvIntoAccount(file, {
+            accountId: r.id,
+            initialBalance,
+            onProgress: setImportMsg,
+          });
+        } catch (e) {
+          // Account exists; only the import failed — keep the modal open and report it.
+          setImportMsg(null);
+          setError(
+            `Account created, but CSV import failed: ${e instanceof Error ? e.message : "Unknown error"}`
+          );
+          refresh();
+          return;
+        }
+      }
       setNewAccount(emptyNewAccount);
+      setCsvFile(null);
+      setImportMsg(null);
       setAddOpen(false);
       refresh();
     });
@@ -200,7 +247,6 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
           numberOfAccounts: a.numberOfAccounts,
           stage: a.stage,
           cost: a.cost,
-          payout: a.payout,
         });
         if ("error" in r && r.error) {
           setError(r.error);
@@ -238,7 +284,6 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
       numberOfAccounts: a.numberOfAccounts,
       stage: nextStage,
       cost: a.cost,
-      payout: a.payout,
     };
     setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, stage: nextStage, status: nextStatus } : x)));
     startTransition(async () => {
@@ -263,7 +308,6 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
       numberOfAccounts: next,
       stage: a.stage,
       cost: a.cost,
-      payout: a.payout,
     };
     setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, numberOfAccounts: next } : x)));
     startTransition(async () => {
@@ -290,7 +334,6 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
       numberOfAccounts: a.numberOfAccounts,
       stage: a.stage,
       cost: a.cost,
-      payout: a.payout,
     };
     setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, status: nextStatus } : x)));
     startTransition(async () => {
@@ -344,7 +387,6 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
       numberOfAccounts: a.numberOfAccounts,
       stage: a.stage,
       cost: n,
-      payout: a.payout,
     };
     setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, cost: n } : x)));
     setCostEditId(null);
@@ -360,41 +402,52 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
     });
   }
 
-  function startEditPayout(a: AccountRow) {
-    setPayoutEditId(a.id);
-    setPayoutValue(String(a.payout));
+  function todayInputValue() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
 
-  function cancelPayoutEdit() {
-    setPayoutEditId(null);
-    setPayoutValue("");
-  }
-
-  function savePayout(a: AccountRow, e: React.FormEvent) {
-    e.preventDefault();
+  function openPayouts(a: AccountRow) {
     setError(null);
-    const n = parseFloat(payoutValue);
-    if (!Number.isFinite(n) || n < 0) {
-      setError("Payout must be a non-negative number");
+    setPayoutAcct(a);
+    setNewPayout({ amount: "", date: todayInputValue(), note: "" });
+  }
+
+  function closePayouts() {
+    setPayoutAcct(null);
+  }
+
+  function submitPayout(e: React.FormEvent) {
+    e.preventDefault();
+    if (!payoutAcct) return;
+    setError(null);
+    const amount = parseFloat(newPayout.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Payout amount must be a positive number");
       return;
     }
-    const payload = {
-      propfirmName: a.propfirmName,
-      description: a.description,
-      status: a.status,
-      numberOfAccounts: a.numberOfAccounts,
-      stage: a.stage,
-      cost: a.cost,
-      payout: n,
-    };
-    setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, payout: n } : x)));
-    setPayoutEditId(null);
-    setPayoutValue("");
+    const acctId = payoutAcct.id;
     startTransition(async () => {
-      const r = await updateAccountDetailsAction(a.id, payload);
+      const r = await addPayoutAction(acctId, {
+        amount,
+        date: newPayout.date,
+        note: newPayout.note.trim() || null,
+      });
       if ("error" in r && r.error) {
         setError(r.error);
-        setAccounts((rows) => rows.map((x) => (x.id === a.id ? { ...x, payout: a.payout } : x)));
+        return;
+      }
+      setNewPayout({ amount: "", date: newPayout.date, note: "" });
+      refresh();
+    });
+  }
+
+  function removePayout(payoutId: number) {
+    setError(null);
+    startTransition(async () => {
+      const r = await deletePayoutAction(payoutId);
+      if ("error" in r && r.error) {
+        setError(r.error);
         return;
       }
       refresh();
@@ -628,13 +681,67 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
               style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
             />
           </div>
+          <div className="sm:col-span-2 lg:col-span-3">
+            <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+              Import trades from CSV (optional)
+            </label>
+            <label
+              className="flex min-h-16 w-full flex-col items-center justify-center gap-1 rounded-md px-3 py-4 text-center text-sm font-medium cursor-pointer"
+              style={{
+                background: "color-mix(in srgb, var(--accent) 10%, var(--bg-base))",
+                color: "var(--text-primary)",
+                border: "1px dashed color-mix(in srgb, var(--accent) 45%, var(--bg-border))",
+                opacity: pending ? 0.6 : 1,
+              }}
+            >
+              <input
+                type="file"
+                accept=".csv"
+                className="hidden"
+                disabled={pending}
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  setCsvFile(f);
+                  setError(null);
+                  e.target.value = "";
+                }}
+              />
+              {csvFile ? (
+                <span>{csvFile.name}</span>
+              ) : (
+                <span>Click to choose a .csv file</span>
+              )}
+              <span className="text-xs font-normal" style={{ color: "var(--text-muted)" }}>
+                {csvFile
+                  ? "Imported into this account after it's created"
+                  : "Broker Performance / P&L export — added after the account is created"}
+              </span>
+            </label>
+            {csvFile ? (
+              <button
+                type="button"
+                onClick={() => setCsvFile(null)}
+                disabled={pending}
+                className="mt-1 text-xs"
+                style={{ color: "var(--text-muted)" }}
+              >
+                Remove file
+              </button>
+            ) : null}
+          </div>
         </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end items-center gap-3">
+              {importMsg ? (
+                <span className="text-xs mr-auto" style={{ color: "var(--text-muted)" }}>
+                  {importMsg}
+                </span>
+              ) : null}
               <button
                 type="button"
                 onClick={closeAdd}
+                disabled={pending}
                 className="text-sm px-3 py-1.5 rounded-md"
-                style={{ color: "var(--text-secondary)" }}
+                style={{ color: "var(--text-secondary)", opacity: pending ? 0.6 : 1 }}
               >
                 Cancel
               </button>
@@ -644,7 +751,7 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
                 className="px-4 py-2 rounded-md text-sm font-medium"
                 style={{ background: "var(--accent)", color: "#000", opacity: pending || !newAccount.name.trim() ? 0.6 : 1 }}
               >
-                {pending ? "…" : "Add account"}
+                {pending ? "…" : csvFile ? "Add account & import" : "Add account"}
               </button>
             </div>
           </form>
@@ -883,62 +990,25 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
                     )}
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums">
-                    {payoutEditId === a.id ? (
-                      <form onSubmit={(e) => savePayout(a, e)} className="flex flex-wrap items-center justify-end gap-2">
-                        <input
-                          type="number"
-                          min={0}
-                          step="any"
-                          required
-                          value={payoutValue}
-                          onChange={(e) => setPayoutValue(e.target.value)}
-                          className="w-24 px-2 py-1 rounded text-sm text-right"
-                          style={{
-                            background: "var(--bg-base)",
-                            border: "1px solid var(--bg-border)",
-                            color: "var(--text-primary)",
-                          }}
-                          autoFocus
-                        />
-                        <button
-                          type="submit"
-                          disabled={pending}
-                          className="text-sm px-2 py-1 rounded"
-                          style={{ background: "var(--accent)", color: "#000" }}
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          onClick={cancelPayoutEdit}
-                          className="text-sm"
-                          style={{ color: "var(--text-muted)" }}
-                        >
-                          Cancel
-                        </button>
-                      </form>
-                    ) : (
-                      <span
-                        className="inline-flex items-center justify-end gap-1.5"
-                        style={{ color: a.payout > 0 ? "var(--profit)" : "var(--text-primary)" }}
+                    <span
+                      className="inline-flex items-center justify-end gap-1.5"
+                      style={{ color: a.payout > 0 ? "var(--profit)" : "var(--text-primary)" }}
+                    >
+                      ${a.payout.toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                      <button
+                        type="button"
+                        onClick={() => openPayouts(a)}
+                        disabled={pending}
+                        className="shrink-0 p-1 rounded hover:opacity-80 transition-opacity"
+                        style={{ color: "var(--text-muted)" }}
+                        title={`Manage payouts (${a.payouts.length})`}
+                        aria-label="Manage payouts"
                       >
-                        ${a.payout.toLocaleString("en-US", { maximumFractionDigits: 0 })}
-                        <button
-                          type="button"
-                          onClick={() => startEditPayout(a)}
-                          disabled={pending}
-                          className="shrink-0 p-1 rounded hover:opacity-80 transition-opacity"
-                          style={{ color: "var(--text-muted)" }}
-                          title="Edit payout"
-                          aria-label="Edit payout"
-                        >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 20h9" />
-                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                          </svg>
-                        </button>
-                      </span>
-                    )}
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 5v14M5 12h14" />
+                        </svg>
+                      </button>
+                    </span>
                   </td>
                   <td
                     className="px-4 py-2 text-right tabular-nums font-medium"
@@ -1123,6 +1193,156 @@ export default function AccountsManager({ initialAccounts, activeId }: Props) {
               </button>
             </div>
           </form>
+        </div>
+      ) : null}
+
+      {payoutAcct ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "color-mix(in srgb, #000 45%, transparent)" }}
+          onClick={closePayouts}
+        >
+          <div
+            className="w-full max-w-lg rounded-lg p-5 space-y-4 max-h-[90vh] overflow-y-auto"
+            style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+                Payouts — {accountLabel(payoutAcct)}
+              </h2>
+              <button
+                type="button"
+                onClick={closePayouts}
+                className="text-lg leading-none px-1"
+                style={{ color: "var(--text-muted)" }}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            {error ? (
+              <p
+                className="text-sm rounded-md px-3 py-2"
+                style={{ background: "color-mix(in srgb, var(--loss) 12%, var(--bg-card))", color: "var(--loss)" }}
+              >
+                {error}
+              </p>
+            ) : null}
+
+            <form onSubmit={submitPayout} className="flex flex-wrap items-end gap-2">
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+                  Amount ($)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step="any"
+                  required
+                  value={newPayout.amount}
+                  onChange={(e) => setNewPayout((f) => ({ ...f, amount: e.target.value }))}
+                  className="w-28 px-2 py-1.5 rounded text-sm text-right tabular-nums"
+                  style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+                  Date
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={newPayout.date}
+                  onChange={(e) => setNewPayout((f) => ({ ...f, date: e.target.value }))}
+                  className="px-2 py-1.5 rounded text-sm"
+                  style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
+                />
+              </div>
+              <div className="flex-1 min-w-[120px]">
+                <label className="block text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
+                  Note (optional)
+                </label>
+                <input
+                  value={newPayout.note}
+                  onChange={(e) => setNewPayout((f) => ({ ...f, note: e.target.value }))}
+                  maxLength={500}
+                  placeholder="e.g. cycle 1"
+                  className="w-full px-2 py-1.5 rounded text-sm"
+                  style={{ background: "var(--bg-base)", border: "1px solid var(--bg-border)", color: "var(--text-primary)" }}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={pending}
+                className="px-3 py-1.5 rounded text-sm font-medium"
+                style={{ background: "var(--accent)", color: "#000", opacity: pending ? 0.6 : 1 }}
+              >
+                {pending ? "…" : "Add"}
+              </button>
+            </form>
+
+            {payoutAcct.payouts.length === 0 ? (
+              <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                No payouts recorded yet.
+              </p>
+            ) : (
+              <div className="rounded-md overflow-hidden" style={{ border: "1px solid var(--bg-border)" }}>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ background: "var(--bg-base)" }}>
+                      <th className="px-3 py-1.5 text-left text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+                        Date
+                      </th>
+                      <th className="px-3 py-1.5 text-right text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+                        Amount
+                      </th>
+                      <th className="px-3 py-1.5 text-left text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+                        Note
+                      </th>
+                      <th className="px-3 py-1.5" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payoutAcct.payouts.map((p) => (
+                      <tr key={p.id} style={{ borderTop: "1px solid var(--bg-border)" }}>
+                        <td className="px-3 py-1.5 tabular-nums" style={{ color: "var(--text-secondary)" }}>
+                          {p.date.slice(0, 10)}
+                        </td>
+                        <td className="px-3 py-1.5 text-right tabular-nums font-medium" style={{ color: "var(--profit)" }}>
+                          ${p.amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-3 py-1.5" style={{ color: "var(--text-muted)" }}>
+                          {p.note ?? "—"}
+                        </td>
+                        <td className="px-3 py-1.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() => removePayout(p.id)}
+                            disabled={pending}
+                            className="p-1 rounded hover:opacity-80 transition-opacity"
+                            style={{ color: "var(--loss)" }}
+                            title="Delete payout"
+                            aria-label="Delete payout"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M3 6h18" />
+                              <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+              Payouts feed the dashboard payout calendar and the Total payout figures.
+            </p>
+          </div>
         </div>
       ) : null}
 

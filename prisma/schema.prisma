@@ -34,8 +34,6 @@ model Account {
   stage           Stage    @default(Eval)
   /** Purchase / eval cost paid for this account (USD). */
   cost            Float    @default(0)
-  /** Total payouts received from this account (USD). */
-  payout          Float    @default(0)
   /** Exclude this account from cross-account calculations (still switchable individually). */
   hiddenFromStats Boolean  @default(false)
   /** Starting account size for equity curve, capital chain, and CSV import (single source per account). */
@@ -43,10 +41,27 @@ model Account {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  trades Trade[]
-  fills  Fill[]
+  trades  Trade[]
+  fills   Fill[]
+  payouts Payout[]
 
   @@map("Account")
+}
+
+/** A single dated payout received from an account (prop-firm withdrawal). */
+model Payout {
+  id        Int      @id @default(autoincrement())
+  accountId Int
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /** Payout amount received (USD). */
+  amount    Float
+  /** Calendar date the payout was received (stored at UTC midnight). */
+  date      DateTime
+  /** Optional free-form note (e.g. payout cycle, reference). */
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([accountId, date])
 }
 
 model Fill {

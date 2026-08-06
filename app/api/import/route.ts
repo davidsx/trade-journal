@@ -10,8 +10,8 @@ import { upsertImportedTrades } from "@/lib/import/csvAccountServer";
 export const runtime = "nodejs";
 
 /**
- * Multipart upload: parse CSV and upsert trades only. Call `POST /api/import/score` afterward
- * for running capital and scores (same as the browser import flow).
+ * Multipart upload: parse CSV and upsert trades only. Call `POST /api/import/finalize` afterward
+ * to recompute running capital (same as the browser import flow).
  */
 export const maxDuration = 120;
 

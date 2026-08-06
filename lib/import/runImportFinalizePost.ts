@@ -4,18 +4,18 @@ import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 import { finalizeCsvAccountCapital } from "@/lib/import/csvAccountServer";
 
-type ScoreBody = {
+type FinalizeBody = {
   rowsInCsv?: number;
   symbol?: string;
   replacedCount?: number;
   accountId?: number;
 };
 
-export async function runImportScorePost(req: NextRequest): Promise<NextResponse> {
-  let body: ScoreBody = {};
+export async function runImportFinalizePost(req: NextRequest): Promise<NextResponse> {
+  let body: FinalizeBody = {};
   try {
     const text = await req.text();
-    if (text.trim()) body = JSON.parse(text) as ScoreBody;
+    if (text.trim()) body = JSON.parse(text) as FinalizeBody;
   } catch {
     body = {};
   }

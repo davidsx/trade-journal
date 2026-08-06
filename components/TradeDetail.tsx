@@ -6,6 +6,11 @@ function fmtUsd(v: number) {
   return `${v >= 0 ? "+" : "-"}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** Unsigned currency for balances (e.g. capital before/after), where a leading +/- reads wrong. */
+function fmtBalance(v: number) {
+  return `${v < 0 ? "-" : ""}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function fmtTime(dt: Date) {
   const HKT_OFFSET_MS = 8 * 60 * 60 * 1000;
   const d = new Date(dt.getTime() + HKT_OFFSET_MS);
@@ -105,7 +110,7 @@ export default function TradeDetail({ trade, dayCandles }: { trade: Trade; dayCa
       <div className="rounded-lg p-5 grid grid-cols-2 gap-4" style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}>
         <div>
           <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>Capital Before</div>
-          <div className="font-semibold tabular-nums">{fmtUsd(trade.capitalBefore)}</div>
+          <div className="font-semibold tabular-nums">{fmtBalance(trade.capitalBefore)}</div>
         </div>
         <div>
           <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>Capital After</div>
@@ -113,7 +118,7 @@ export default function TradeDetail({ trade, dayCandles }: { trade: Trade; dayCa
             className="font-semibold tabular-nums"
             style={{ color: trade.capitalAfter >= trade.capitalBefore ? "var(--profit)" : "var(--loss)" }}
           >
-            {fmtUsd(trade.capitalAfter)}
+            {fmtBalance(trade.capitalAfter)}
           </div>
         </div>
       </div>

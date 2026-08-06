@@ -15,11 +15,14 @@ export default async function AccountsPage() {
       numberOfAccounts: true,
       stage: true,
       cost: true,
-      payout: true,
       hiddenFromStats: true,
       initialBalance: true,
       createdAt: true,
       _count: { select: { trades: true } },
+      payouts: {
+        orderBy: { date: "desc" },
+        select: { id: true, amount: true, date: true, note: true },
+      },
     },
   });
 
@@ -50,7 +53,13 @@ export default async function AccountsPage() {
           numberOfAccounts: a.numberOfAccounts,
           stage: a.stage,
           cost: a.cost,
-          payout: a.payout,
+          payout: a.payouts.reduce((sum, p) => sum + p.amount, 0),
+          payouts: a.payouts.map((p) => ({
+            id: p.id,
+            amount: p.amount,
+            date: p.date.toISOString(),
+            note: p.note,
+          })),
           hiddenFromStats: a.hiddenFromStats,
           pnl: pnlMap.get(a.id) ?? 0,
           initialBalance: a.initialBalance,

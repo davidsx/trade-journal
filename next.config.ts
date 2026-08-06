@@ -11,8 +11,8 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["yahoo-finance2", "@react-pdf/renderer"],
   async rewrites() {
     return [
-      /** Legacy alias; segment config must live only on `app/api/import/score/route.ts`. */
-      { source: "/api/import/finalize", destination: "/api/import/score" },
+      /** Legacy alias; the real route now lives at `app/api/import/finalize/route.ts`. */
+      { source: "/api/import/score", destination: "/api/import/finalize" },
     ];
   },
 };

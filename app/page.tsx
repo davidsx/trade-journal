@@ -3,7 +3,7 @@ import { tradesWhere } from "@/lib/accountScope";
 import { prisma } from "@/lib/db/prisma";
 import { computeSummaryMetrics } from "@/lib/analytics/metrics";
 import { getAccountSettings } from "@/lib/accountSettings";
-import TradingCalendar from "@/components/TradingCalendar";
+import PayoutCalendar from "@/components/PayoutCalendar";
 import AccountStatusPanel from "@/components/AccountStatusPanel";
 import CsvUpload from "@/components/CsvUpload";
 import { accountLabel } from "@/lib/accountLabel";
@@ -12,20 +12,42 @@ export default async function DashboardPage() {
   const [settings, accountId] = await Promise.all([getAccountSettings(), getActiveAccountId()]);
   const trades = await prisma.trade.findMany({ where: tradesWhere(accountId), orderBy: { entryTime: "asc" } });
 
-  // Calendar aggregates every non-hidden account (running, breached, and passed alike);
-  // only accounts explicitly hidden from stats are excluded.
-  const hiddenAccounts = await prisma.account.findMany({
-    where: { hiddenFromStats: true },
-    select: { id: true },
-  });
-  const hiddenIds = hiddenAccounts.map((a) => a.id);
-  const calendarTrades = await prisma.trade.findMany({
-    where: hiddenIds.length > 0 ? { accountId: { notIn: hiddenIds } } : {},
-    orderBy: { entryTime: "asc" },
-  });
+  // Payout/cost calendar: across all accounts except those hidden from stats.
+  const [payoutRows, costAccounts] = await Promise.all([
+    prisma.payout.findMany({
+      where: { account: { hiddenFromStats: false } },
+      orderBy: { date: "asc" },
+      select: {
+        id: true,
+        amount: true,
+        date: true,
+        note: true,
+        account: { select: { name: true, propfirmName: true, initialBalance: true } },
+      },
+    }),
+    // Cost has no transaction date; place it on the account's creation day.
+    prisma.account.findMany({
+      where: { hiddenFromStats: false, cost: { gt: 0 } },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, cost: true, createdAt: true, name: true, propfirmName: true, initialBalance: true },
+    }),
+  ]);
+  const calendarPayouts = payoutRows.map((p) => ({
+    id: p.id,
+    accountLabel: accountLabel(p.account),
+    amount: p.amount,
+    date: p.date.toISOString(),
+    note: p.note,
+  }));
+  const calendarCosts = costAccounts.map((a) => ({
+    id: a.id,
+    accountLabel: accountLabel(a),
+    amount: a.cost,
+    date: a.createdAt.toISOString(),
+  }));
 
   // Cross-account status: running (non-breached) evals + funded. Hidden accounts are excluded.
-  const [statusAccounts, pnlByAccount] = await Promise.all([
+  const [statusAccounts, pnlByAccount, payoutByAccount] = await Promise.all([
     prisma.account.findMany({
       where: { hiddenFromStats: false },
       orderBy: { id: "asc" },
@@ -38,13 +60,14 @@ export default async function DashboardPage() {
         status: true,
         numberOfAccounts: true,
         cost: true,
-        payout: true,
         _count: { select: { trades: true } },
       },
     }),
     prisma.trade.groupBy({ by: ["accountId"], _sum: { netPnl: true } }),
+    prisma.payout.groupBy({ by: ["accountId"], _sum: { amount: true } }),
   ]);
   const pnlMap = new Map(pnlByAccount.map((g) => [g.accountId, g._sum.netPnl ?? 0]));
+  const payoutMap = new Map(payoutByAccount.map((g) => [g.accountId, g._sum.amount ?? 0]));
   // Import destinations: hidden accounts are already excluded above; also drop breached ones.
   const importAccounts = statusAccounts
     .filter((a) => a.status !== "Breached")
@@ -67,9 +90,9 @@ export default async function DashboardPage() {
       tradeCount: a._count.trades,
     }));
 
-  // Cost / payout totals across non-hidden accounts (both are per-row totals already).
+  // Cost total from account rows; payout total from the dated payout ledger (non-hidden accounts only).
   const totalCost = statusAccounts.reduce((sum, a) => sum + a.cost, 0);
-  const totalPayout = statusAccounts.reduce((sum, a) => sum + a.payout, 0);
+  const totalPayout = statusAccounts.reduce((sum, a) => sum + (payoutMap.get(a.id) ?? 0), 0);
   const netAfterFees = totalPayout - totalCost;
 
   const metrics = computeSummaryMetrics(trades, {
@@ -133,24 +156,12 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* Calendar — client aggregates by local exit date */}
+      {/* Payout calendar — dated payouts by calendar day; cost shown as a total */}
       <div
         className="rounded-lg p-4"
         style={{ background: "var(--bg-card)", border: "1px solid var(--bg-border)" }}
       >
-        <TradingCalendar
-          trades={calendarTrades.map((t) => ({
-            id: t.id,
-            contractName: t.contractName,
-            direction: t.direction,
-            entryTime: t.entryTime.toISOString(),
-            exitTime: t.exitTime.toISOString(),
-            entryPrice: t.entryPrice,
-            exitPrice: t.exitPrice,
-            netPnl: t.netPnl,
-            holdingMins: t.holdingMins,
-          }))}
-        />
+        <PayoutCalendar payouts={calendarPayouts} costs={calendarCosts} totalCost={totalCost} />
       </div>
     </div>
   );

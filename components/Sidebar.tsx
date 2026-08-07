@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AccountSwitcher from "./AccountSwitcher";
 
 function Icon({ d, size = 16 }: { d: string; size?: number }) {
@@ -50,24 +50,16 @@ type SidebarProps = {
   accounts: { id: number; name: string; propfirmName: string | null; initialBalance: number }[];
 };
 
-export default function Sidebar({ activeAccount, accounts }: SidebarProps) {
+/** Shared nav body used by both the desktop rail and the mobile drawer. */
+function NavBody({
+  activeAccount,
+  accounts,
+  collapsed,
+  onNavigate,
+}: SidebarProps & { collapsed: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
-
   return (
-    <nav
-      className="flex min-h-0 min-w-0 shrink-0 flex-col py-6 border-r transition-all duration-200"
-      style={{
-        width: collapsed ? 56 : 208,
-        background: "var(--bg-card)",
-        borderColor: "var(--bg-border)",
-        height: "100vh",
-        maxHeight: "100dvh",
-        position: "sticky",
-        top: 0,
-        overflow: "hidden",
-      }}
-    >
+    <>
       {/* Header */}
       <div className={`shrink-0 ${collapsed ? "mb-4 px-3" : "mb-6 px-4"}`}>
         {collapsed ? (
@@ -91,6 +83,7 @@ export default function Sidebar({ activeAccount, accounts }: SidebarProps) {
             <li key={item.href}>
               <Link
                 href={item.href}
+                onClick={onNavigate}
                 title={collapsed ? item.label : undefined}
                 className="flex items-center gap-3 px-2 py-2 rounded-md text-sm transition-colors"
                 style={{
@@ -111,22 +104,124 @@ export default function Sidebar({ activeAccount, accounts }: SidebarProps) {
       <div className="mt-2 shrink-0 border-t pt-3" style={{ borderColor: "var(--bg-border)" }}>
         <AccountSwitcher activeId={activeAccount.id} accounts={accounts} compact={collapsed} />
       </div>
+    </>
+  );
+}
 
-      {/* Toggle button */}
-      <button
-        type="button"
-        onClick={() => setCollapsed((c) => !c)}
-        className="mt-4 mb-1 mx-auto flex shrink-0 items-center justify-center rounded-md text-xs transition-colors"
+export default function Sidebar({ activeAccount, accounts }: SidebarProps) {
+  const pathname = usePathname();
+  const [collapsed, setCollapsed] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Close the mobile drawer whenever the route changes.
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
+
+  // Lock body scroll while the mobile drawer is open.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [drawerOpen]);
+
+  return (
+    <>
+      {/* Desktop rail — sticky side column, md and up */}
+      <nav
+        className="hidden md:flex min-h-0 min-w-0 shrink-0 flex-col py-6 border-r transition-all duration-200"
         style={{
-          width: 32,
-          height: 24,
-          background: "var(--bg-border)",
-          color: "var(--text-muted)",
+          width: collapsed ? 56 : 208,
+          background: "var(--bg-card)",
+          borderColor: "var(--bg-border)",
+          height: "100vh",
+          maxHeight: "100dvh",
+          position: "sticky",
+          top: 0,
+          overflow: "hidden",
         }}
-        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
-        {collapsed ? "›" : "‹"}
-      </button>
-    </nav>
+        <NavBody activeAccount={activeAccount} accounts={accounts} collapsed={collapsed} />
+
+        {/* Toggle button */}
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          className="mt-4 mb-1 mx-auto flex shrink-0 items-center justify-center rounded-md text-xs transition-colors"
+          style={{
+            width: 32,
+            height: 24,
+            background: "var(--bg-border)",
+            color: "var(--text-muted)",
+          }}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? "›" : "‹"}
+        </button>
+      </nav>
+
+      {/* Mobile top bar — fixed, below md */}
+      <header
+        className="md:hidden fixed inset-x-0 top-0 z-40 flex items-center gap-3 px-4 h-14 border-b"
+        style={{ background: "var(--bg-card)", borderColor: "var(--bg-border)" }}
+      >
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(true)}
+          className="flex items-center justify-center rounded-md"
+          style={{ width: 36, height: 36, background: "var(--bg-border)", color: "var(--text-primary)" }}
+          aria-label="Open menu"
+          aria-expanded={drawerOpen}
+        >
+          <Icon d="M2 4h12M2 8h12M2 12h12" size={18} />
+        </button>
+        <span className="text-sm font-semibold" style={{ color: "var(--accent)" }}>
+          TRADE JOURNAL
+        </span>
+      </header>
+
+      {/* Mobile drawer + backdrop */}
+      {drawerOpen && (
+        <div className="md:hidden fixed inset-0 z-50">
+          <div
+            className="absolute inset-0"
+            style={{ background: "rgba(0,0,0,0.5)" }}
+            onClick={() => setDrawerOpen(false)}
+            aria-hidden
+          />
+          <nav
+            className="absolute left-0 top-0 flex min-h-0 w-64 max-w-[80vw] flex-col py-6 border-r"
+            style={{
+              background: "var(--bg-card)",
+              borderColor: "var(--bg-border)",
+              height: "100vh",
+              maxHeight: "100dvh",
+              overflow: "hidden",
+            }}
+          >
+            <div className="flex justify-end px-4 mb-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(false)}
+                className="flex items-center justify-center rounded-md text-sm"
+                style={{ width: 28, height: 28, background: "var(--bg-border)", color: "var(--text-muted)" }}
+                aria-label="Close menu"
+              >
+                ✕
+              </button>
+            </div>
+            <NavBody
+              activeAccount={activeAccount}
+              accounts={accounts}
+              collapsed={false}
+              onNavigate={() => setDrawerOpen(false)}
+            />
+          </nav>
+        </div>
+      )}
+    </>
   );
 }

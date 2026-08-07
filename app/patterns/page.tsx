@@ -154,7 +154,8 @@ export default async function PatternsPage({
         {instruments.length === 0 ? (
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>No data yet</p>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+          <table className="w-full text-sm min-w-[560px]">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--bg-border)" }}>
                 {["Instrument", "Trades", "Win Rate", "Profit Factor", "Avg P&L", "Total P&L", ""].map((h) => (
@@ -213,6 +214,7 @@ export default async function PatternsPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

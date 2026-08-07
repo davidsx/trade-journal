@@ -157,6 +157,9 @@ export default function TradingCalendar({ trades }: Props) {
         </div>
       </div>
 
+      {/* Horizontal scroll on narrow screens so the 8-column grid stays legible instead of crushing. */}
+      <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+      <div className="min-w-[640px]">
       <div className={`grid ${GRID_COLS} gap-1 text-center mb-0.5`}>
         {WEEKDAYS.map((w) => (
           <div
@@ -301,6 +304,8 @@ export default function TradingCalendar({ trades }: Props) {
             </div>
           );
         })}
+      </div>
+      </div>
       </div>
 
       <p className="text-[11px] mt-2" style={{ color: "var(--text-muted)" }}>

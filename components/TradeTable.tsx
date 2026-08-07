@@ -93,10 +93,10 @@ export default function TradeTable({ trades, sortBy, sortDir, queryParams = {} }
 
   return (
     <div
-      className="rounded-lg overflow-hidden"
-      style={{ border: "1px solid var(--bg-border)" }}
+      className="rounded-lg overflow-x-auto"
+      style={{ border: "1px solid var(--bg-border)", WebkitOverflowScrolling: "touch" }}
     >
-      <table className="w-full text-sm">
+      <table className="w-full text-sm min-w-[640px]">
         <thead>
           <tr style={{ background: "var(--bg-card)", borderBottom: "1px solid var(--bg-border)" }}>
             <PlainHeader label="Contract" />

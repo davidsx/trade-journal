@@ -232,6 +232,9 @@ export default function PayoutCalendar({ payouts, costs, totalCost }: Props) {
         </span>
       </div>
 
+      {/* Horizontal scroll on narrow screens so the 8-column grid stays legible instead of crushing. */}
+      <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+      <div className="min-w-[560px]">
       <div className={`grid ${GRID_COLS} gap-1 mb-0.5`}>
         {WEEKDAYS.map((w) => (
           <div key={w} className="text-[10px] uppercase tracking-wide py-0.5 px-1 font-medium text-left" style={{ color: "var(--text-muted)" }}>
@@ -338,6 +341,8 @@ export default function PayoutCalendar({ payouts, costs, totalCost }: Props) {
             </div>
           );
         })}
+      </div>
+      </div>
       </div>
 
       {/* Daily summary — details for the selected day */}

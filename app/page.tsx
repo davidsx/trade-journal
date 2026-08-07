@@ -119,7 +119,7 @@ export default async function DashboardPage() {
         <h2 className="text-sm font-medium mb-3" style={{ color: "var(--text-secondary)" }}>
           Account economics
         </h2>
-        <div className="grid grid-cols-3 gap-4 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
           <div>
             <div className="text-xs uppercase tracking-wide mb-1" style={{ color: "var(--text-muted)" }}>
               Total cost

@@ -35,6 +35,8 @@ const ICON_PATTERNS = "M8 2L14 8L8 14L2 8ZM5 8h6M8 5v6";
 const ICON_CHART = "M4 3v3M4 9v4M4 5h2v4H4zM10 4v2M10 10v2M10 6h2v4h-2z";
 // Accounts: wallet / layers
 const ICON_ACCOUNTS = "M2 4h12v8H2zM4 6h8M4 9h5M14 2v3h3";
+// Wallpaper: phone with picture
+const ICON_WALLPAPER = "M5 1h6v14H5zM7 13h2M6.5 4l1.5 2 2-2.5 2 3.5H6z";
 
 const NAV = [
   { href: "/",            label: "Dashboard",  iconPath: ICON_DASHBOARD  },
@@ -43,6 +45,7 @@ const NAV = [
   { href: "/patterns",    label: "Patterns",   iconPath: ICON_PATTERNS   },
   { href: "/chart",       label: "Chart",      iconPath: ICON_CHART      },
   { href: "/accounts",    label: "Accounts",   iconPath: ICON_ACCOUNTS   },
+  { href: "/wallpaper",   label: "Wallpaper",  iconPath: ICON_WALLPAPER  },
 ];
 
 type SidebarProps = {

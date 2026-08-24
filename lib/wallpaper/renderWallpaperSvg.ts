@@ -28,7 +28,9 @@ function hktDate(ts: number): string {
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 }
 
-const FONT = "-apple-system, SF Pro Display, Helvetica, sans-serif";
+// Bundled font (see lib/wallpaper/fonts) so rasterizing works on Vercel's font-less
+// Linux runtime — system fonts like -apple-system are absent there and render as tofu.
+const FONT = "DejaVu Sans, sans-serif";
 
 /**
  * Build the wallpaper SVG from the last N (default 6) candles.

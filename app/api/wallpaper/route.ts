@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import sharp from "sharp";
 import { fetchCandlesForRange, type Candle } from "@/lib/candles/candlesServer";
-import { renderWallpaperSvg } from "@/lib/wallpaper/renderWallpaperSvg";
+import { renderWallpaperSvg, WALLPAPER_W } from "@/lib/wallpaper/renderWallpaperSvg";
+import { svgToPng } from "@/lib/wallpaper/rasterize";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,7 +44,7 @@ export async function GET() {
   }
 
   const svg = renderWallpaperSvg(clean);
-  const png = await sharp(Buffer.from(svg)).png().toBuffer();
+  const png = await svgToPng(svg, WALLPAPER_W);
 
   return new NextResponse(new Uint8Array(png), {
     status: 200,
